@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard - Personal Assistant</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='admin.css') }}"
+    />
+  </head>
+  <body>
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <div class="admin-info">
+        <div class="admin-avatar">A</div>
+        <span class="admin-name">{{ user.username }}</span>
+      </div>
+      <button class="logout-btn" onclick="handleLogout()">
+        <i class="fas fa-sign-out-alt"></i>
+        Logout
+      </button>
+    </nav>
+
+    <div class="container">
+      <!-- LEFT PANEL - Admin Management Section -->
+      <div class="admin-panel">
+        <!-- Upload Section -->
+        <div class="upload-card">
+          <div class="card-header">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <h3>Upload Knowledge Base</h3>
+          </div>
+          <form id="uploadForm" enctype="multipart/form-data">
+            <div class="file-input-wrapper">
+              <input
+                type="file"
+                id="pdfFile"
+                name="file"
+                accept=".pdf"
+                required
+              />
+              <label for="pdfFile" class="file-label">
+                <i class="fas fa-file-pdf"></i>
+                <span id="fileName">Choose PDF file to upload...</span>
+              </label>
+            </div>
+            <button type="submit" class="upload-btn" id="uploadBtn">
+              <i class="fas fa-upload"></i>
+              Upload PDF
+            </button>
+          </form>
+          <div id="uploadStatus"></div>
+        </div>
+
+        <!-- Document Management Section -->
+        <div class="documents-card">
+          <div class="card-header">
+            <i class="fas fa-folder-open"></i>
+            <h3>Uploaded Documents</h3>
+          </div>
+          <div id="documentsList" class="documents-list">
+            <div class="empty-state">
+              <i class="fas fa-file-pdf"></i>
+              <p>No documents uploaded yet</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL - Chat Interface -->
+      <div class="chat-panel">
+        <div class="chat-container">
+          <div class="chat-header">
+            <div class="assistant-avatar">
+              <i class="fas fa-robot"></i>
+            </div>
+            <div class="assistant-info">
+              <h2>Personal Assistant</h2>
+              <p>Your intelligent AI companion</p>
+            </div>
+            <div class="status-indicator"></div>
+          </div>
+
+          <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+              <h3>👋 Hello Admin!</h3>
+              <p>
+                I'm your Personal Assistant. You can chat with me or manage the
+                knowledge base from the left panel.
+              </p>
+              <div class="suggestions">
+                <div
+                  class="suggestion-chip"
+                  onclick="sendSuggestion('Tell me about yourself')"
+                >
+                  Tell me about yourself
+                </div>
+                <div
+                  class="suggestion-chip"
+                  onclick="sendSuggestion('What can you help me with?')"
+                >
+                  What can you help me with?
+                </div>
+                <div
+                  class="suggestion-chip"
+                  onclick="sendSuggestion('Give me some tips')"
+                >
+                  Give me some tips
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-input">
+            <div class="input-wrapper">
+              <input
+                type="text"
+                id="messageInput"
+                placeholder="Type your message here..."
+                autocomplete="off"
+              />
+              <button class="emoji-btn" onclick="insertEmoji()">😊</button>
+            </div>
+            <button id="sendButton">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+  </body>
+</html>

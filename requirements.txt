@@ -1,0 +1,14 @@
+# flask
+# flask-sqlalchemy
+# langchain
+# langchain-community
+# langchain-pinecone
+# langchain-groq
+# groq
+# pinecone-client
+# python-dotenv
+# werkzeug
+# pypdf
+# sentence-transformers
+# langchain-text-splitters
+langchain-core
