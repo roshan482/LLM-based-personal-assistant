@@ -1,9 +1,81 @@
+let currentSession = null;
+
+async function createNewChat() {
+  const response = await fetch("/chat/new");
+  const data = await response.json();
+
+  currentSession = data.session_id;
+
+  chatMessages.innerHTML = "";
+
+  loadChatHistory();
+}
+
+async function loadChatHistory() {
+  const response = await fetch("/chat/history");
+  const chats = await response.json();
+
+  const historyDiv = document.getElementById("chatHistory");
+
+  historyDiv.innerHTML = "";
+
+  chats.forEach((chat) => {
+    const item = document.createElement("div");
+    item.className = "chat-item";
+
+    if (chat.id === currentSession) {
+      item.classList.add("active");
+    }
+
+    item.innerHTML = `
+    <div class="chat-avatar">💬</div>
+    <div class="chat-preview">${chat.title}</div>
+    <div class="chat-time">${chat.time}</div>
+    <button class="delete-chat" onclick="deleteChat(${chat.id}, event)">🗑</button>
+    `;
+
+    item.onclick = () => loadChat(chat.id);
+
+    historyDiv.appendChild(item);
+  });
+}
+
+async function loadChat(sessionId) {
+  currentSession = sessionId;
+
+  const response = await fetch(`/chat/messages/${sessionId}`);
+  const messages = await response.json();
+
+  chatMessages.innerHTML = "";
+
+  messages.forEach((m) => {
+    addMessage(m.content, m.role === "user");
+  });
+}
+
+async function deleteChat(chatId, event) {
+  event.stopPropagation();
+
+  if (!confirm("Delete this chat?")) return;
+
+  const response = await fetch(`/chat/delete/${chatId}`, {
+    method: "DELETE",
+  });
+
+  const result = await response.json();
+
+  if (result.success) {
+    loadChatHistory();
+    chatMessages.innerHTML = "";
+  }
+}
 // static/dashboard.js
 // Shared JavaScript for chat.html and admin_dashboard.html
 
 // ==============================================
 // INITIALIZE DOM ELEMENTS
 // ==============================================
+
 let chatMessages, messageInput, sendButton;
 
 // Wait for DOM to load before initializing
@@ -31,6 +103,9 @@ document.addEventListener("DOMContentLoaded", function () {
     setupAdminFeatures();
     loadDocuments();
   }
+
+  loadChatHistory();
+  createNewChat();
 
   console.log("Dashboard JS initialized successfully");
 });
@@ -62,54 +137,60 @@ function scrollToBottom() {
 }
 
 function addMessage(text, isUser = false) {
-  if (!chatMessages) {
-    console.error("chatMessages element not found");
-    return;
-  }
-
-  // Remove welcome message if exists
   const welcomeMsg = chatMessages.querySelector(".welcome-message");
-  if (welcomeMsg) {
-    welcomeMsg.remove();
-  }
+  if (welcomeMsg) welcomeMsg.remove();
 
   const messageDiv = document.createElement("div");
-  messageDiv.className = `message ${
-    isUser ? "user-message" : "assistant-message"
-  }`;
+  messageDiv.className = `message ${isUser ? "user" : "assistant"}`;
 
   messageDiv.innerHTML = `
-    <div class="message-avatar">
-      <i class="fas fa-${isUser ? "user" : "robot"}"></i>
-    </div>
-    <div class="message-content">
-      ${text}
-      <span class="message-time">${getCurrentTime()}</span>
-    </div>
+      <div class="message-avatar">
+        ${isUser ? "🧑" : "🤖"}
+      </div>
+      <div class="message-bubble">
+        ${text}
+      </div>
   `;
 
   chatMessages.appendChild(messageDiv);
   scrollToBottom();
 }
 
-function showTypingIndicator() {
-  if (!chatMessages) return;
+function typeWriter(text) {
+  const messageDiv = document.createElement("div");
+  messageDiv.className = "message assistant";
 
+  messageDiv.innerHTML = `
+      <div class="message-avatar">🤖</div>
+      <div class="message-bubble" id="typingText"></div>
+  `;
+
+  chatMessages.appendChild(messageDiv);
+
+  const typingText = messageDiv.querySelector("#typingText");
+
+  let i = 0;
+
+  function typing() {
+    if (i < text.length) {
+      typingText.innerHTML += text.charAt(i);
+      i++;
+      scrollToBottom();
+      setTimeout(typing, 15);
+    }
+  }
+
+  typing();
+}
+
+function showTypingIndicator() {
   const typingDiv = document.createElement("div");
-  typingDiv.className = "message assistant-message";
+  typingDiv.className = "message assistant";
   typingDiv.id = "typingIndicator";
 
   typingDiv.innerHTML = `
-    <div class="message-avatar">
-      <i class="fas fa-robot"></i>
-    </div>
-    <div class="typing-indicator active">
-      <div class="typing-dots">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-    </div>
+    <div class="message-avatar">🤖</div>
+    <div class="message-bubble">Typing...</div>
   `;
 
   chatMessages.appendChild(typingDiv);
@@ -141,6 +222,7 @@ async function sendMessage() {
 
   const formData = new FormData();
   formData.append("msg", message);
+  formData.append("session_id", currentSession);
 
   try {
     const response = await fetch("/get", {
@@ -152,7 +234,10 @@ async function sendMessage() {
 
     if (response.ok) {
       const botResponse = await response.text();
-      addMessage(botResponse);
+      typeWriter(botResponse);
+
+      // refresh sidebar title
+      loadChatHistory();
     } else {
       addMessage("Sorry, something went wrong. Please try again.");
     }
@@ -171,7 +256,7 @@ function sendSuggestion(text) {
 }
 
 function insertEmoji() {
-  const emojis = ["😊", "👍", "❤️", "🎉", "🤔", "👋", "✨", "🚀"];
+  const emojis = ["😊"];
   const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
   messageInput.value += randomEmoji;
   messageInput.focus();
@@ -293,15 +378,15 @@ async function loadDocuments() {
               doc.status === "completed"
                 ? "#2e7d32"
                 : doc.status === "failed"
-                ? "#c62828"
-                : "#f57c00"
+                  ? "#c62828"
+                  : "#f57c00"
             }; font-weight: 600;">
               ${
                 doc.status === "completed"
                   ? "✅"
                   : doc.status === "failed"
-                  ? "❌"
-                  : "⏳"
+                    ? "❌"
+                    : "⏳"
               } ${doc.status}
             </span><br>
             Chunks: <strong>${
@@ -314,7 +399,7 @@ async function loadDocuments() {
             <i class="fas fa-trash-alt"></i> Delete
           </button>
         </div>
-      `
+      `,
         )
         .join("");
     } else {

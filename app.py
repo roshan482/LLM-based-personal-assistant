@@ -18,6 +18,7 @@ from src.helper import load_pdf_file, filter_to_minimal_docs, text_split
 import tempfile
 import shutil
 from authlib.integrations.flask_client import OAuth
+import traceback
 
 load_dotenv()
 
@@ -96,7 +97,8 @@ try:
     rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
 except Exception as e:
-    print("Warning: failed to initialize vector/LLM components:", e)
+    print("\n===== RAG INITIALIZATION ERROR =====")
+    traceback.print_exc()
     rag_chain = None
 
 
@@ -114,6 +116,19 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+class ChatSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    title = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class ChatMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.Integer, db.ForeignKey('chat_session.id'))
+    role = db.Column(db.String(20))   # user / assistant
+    content = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class UploadedDocument(db.Model):
@@ -202,18 +217,14 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and user.check_password(password):
-
             session['user_id'] = user.id
             session['role'] = user.role
-
-            if user.role == "admin":
+            if user.role == 'admin':
                 return redirect(url_for('admin'))
-
-            return redirect(url_for('dashboard'))
-
-        flash("Invalid username or password")
-
-    return render_template("login.html")
+            elif user.role == 'user':
+                return render_template('chat.html', user=user)
+        flash('Invalid username or password', 'error')
+    return render_template('login.html')
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -327,19 +338,114 @@ def admin():
 # CHAT
 # -------------------------
 
-@app.route("/get", methods=["GET", "POST"])
+@app.route("/get", methods=["POST"])
 @login_required
 def chat():
+
+    msg = request.form.get("msg")
+    session_id = request.form.get("session_id")
 
     if not rag_chain:
         return "Chat system not initialized."
 
-    msg = request.form.get("msg")
-
     response = rag_chain.invoke({"input": msg})
+    answer = str(response.get("answer"))
 
-    return str(response.get("answer"))
+    # Save user message
+    user_message = ChatMessage(
+        session_id=session_id,
+        role="user",
+        content=msg
+    )
 
+    db.session.add(user_message)
+
+   # AUTO TITLE GENERATION (ONLY FIRST MESSAGE)
+    chat_session = ChatSession.query.get(session_id)
+
+    if chat_session and chat_session.title == "New Chat":
+        chat_session.title = msg[:40]   # first 40 characters
+
+    # SAVE AI MESSAGE
+    bot_message = ChatMessage(
+        session_id=session_id,
+        role="assistant",
+        content=answer
+    )
+
+    db.session.add(bot_message)
+    db.session.commit()
+
+    return answer
+
+@app.route("/chat/new")
+@login_required
+def new_chat():
+
+    user_id = session["user_id"]
+
+    new_session = ChatSession(
+        user_id=user_id,
+        title="New Chat"
+    )
+
+    db.session.add(new_session)
+    db.session.commit()
+
+    return jsonify({
+        "session_id": new_session.id
+    })
+
+@app.route("/chat/history")
+@login_required
+def chat_history():
+
+    user_id = session["user_id"]
+
+    sessions = ChatSession.query.filter_by(
+        user_id=user_id
+    ).order_by(ChatSession.created_at.desc()).all()
+
+    data = []
+
+    for s in sessions:
+        data.append({
+            "id": s.id,
+            "title": s.title,
+            "time": s.created_at.strftime("%H:%M")
+        })
+
+    return jsonify(data)
+
+@app.route("/chat/messages/<int:session_id>")
+@login_required
+def chat_messages(session_id):
+
+    messages = ChatMessage.query.filter_by(
+        session_id=session_id
+    ).order_by(ChatMessage.created_at).all()
+
+    data = []
+
+    for m in messages:
+        data.append({
+            "role": m.role,
+            "content": m.content
+        })
+
+    return jsonify(data)
+
+@app.route("/chat/delete/<int:session_id>", methods=["DELETE"])
+@login_required
+def delete_chat(session_id):
+
+    ChatMessage.query.filter_by(session_id=session_id).delete()
+
+    ChatSession.query.filter_by(id=session_id).delete()
+
+    db.session.commit()
+
+    return jsonify({"success": True})
 
 @app.route('/logout')
 def logout():
