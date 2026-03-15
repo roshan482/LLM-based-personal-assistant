@@ -708,15 +708,22 @@
         }, 800);
       }
 
+
+      function getUserInitial() {
+        return '${{ user.username[0] }}';
+        }
+
       function addMessage(content, role) {
         const chatMessages = document.getElementById('chatMessages');
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}`;
         
         messageDiv.innerHTML = `
-          <div class="message-avatar">${role === 'user' ? '{{ user.username[0] }}' : '🤖'}</div>
+          <div class="message-avatar">${role === 'user' ? '${getUserInitial()}' : '🤖'}</div>
           <div class="message-bubble">${content}</div>
-        `;
+      `;
+
+
         
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
