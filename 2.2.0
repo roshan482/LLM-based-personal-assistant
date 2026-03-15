@@ -1,9 +1,0 @@
-Requirement already satisfied: itsdangerous in c:\users\`\desktop\llm\llm-based-personal-assistant\venv\lib\site-packages (2.1.2)
-Collecting itsdangerous
-  Using cached itsdangerous-2.2.0-py3-none-any.whl (16 kB)
-Installing collected packages: itsdangerous
-  Attempting uninstall: itsdangerous
-    Found existing installation: itsdangerous 2.1.2
-    Uninstalling itsdangerous-2.1.2:
-      Successfully uninstalled itsdangerous-2.1.2
-Successfully installed itsdangerous-2.2.0
