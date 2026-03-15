@@ -5,8 +5,7 @@ from typing import List
 from langchain_core.documents import Document
 # Replace old imports
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
-from langchain_community.embeddings import HuggingFaceEmbeddings
-
+from langchain_huggingface import HuggingFaceEmbeddings
 
 #Extract Data From the PDF File
 def load_pdf_file(data, file_name=None):

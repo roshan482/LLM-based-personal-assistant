@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -12,24 +12,47 @@
       }
 
       body {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        background: linear-gradient(
+          135deg,
+          #0f172a 0%,
+          #1e293b 50%,
+          #334155 100%
+        );
         height: 100vh;
         overflow: hidden;
         color: #f1f5f9;
       }
 
       body::before {
-        content: '';
+        content: "";
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
-        background-image: 
-          radial-gradient(circle at 20% 80%, rgba(147, 51, 234, 0.08) 0%, transparent 50%),
-          radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
-          radial-gradient(circle at 40% 40%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+        background-image:
+          radial-gradient(
+            circle at 20% 80%,
+            rgba(147, 51, 234, 0.08) 0%,
+            transparent 50%
+          ),
+          radial-gradient(
+            circle at 80% 20%,
+            rgba(59, 130, 246, 0.08) 0%,
+            transparent 50%
+          ),
+          radial-gradient(
+            circle at 40% 40%,
+            rgba(16, 185, 129, 0.04) 0%,
+            transparent 50%
+          );
         pointer-events: none;
         z-index: -1;
       }
@@ -260,9 +283,15 @@
       }
 
       @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-        70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        0% {
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+        }
+        70% {
+          box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+        }
       }
 
       .chat-messages {
@@ -428,11 +457,20 @@
       }
 
       @keyframes slideIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
-      .message.user { margin-left: auto; flex-direction: row-reverse; }
+      .message.user {
+        margin-left: auto;
+        flex-direction: row-reverse;
+      }
       .message-bubble {
         padding: 14px 20px;
         border-radius: 20px;
@@ -468,8 +506,14 @@
         justify-content: center;
       }
 
-      .message.user .message-avatar { background: rgba(59, 130, 246, 0.3); color: #60a5fa; }
-      .message.assistant .message-avatar { background: rgba(16, 185, 129, 0.3); color: #34d399; }
+      .message.user .message-avatar {
+        background: rgba(59, 130, 246, 0.3);
+        color: #60a5fa;
+      }
+      .message.assistant .message-avatar {
+        background: rgba(16, 185, 129, 0.3);
+        color: #34d399;
+      }
 
       /* Responsive */
       @media (max-width: 1024px) {
@@ -482,13 +526,35 @@
       }
 
       @media (max-width: 768px) {
-        .nav-header, .chat-header, .chat-input {
+        .nav-header,
+        .chat-header,
+        .chat-input {
           padding-left: 16px;
           padding-right: 16px;
         }
         .chat-messages {
           padding: 16px;
         }
+      }
+
+      .delete-chat {
+        background: rgba(239, 68, 68, 0.15);
+        border: none;
+        color: #f87171;
+        cursor: pointer;
+        font-size: 16px;
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+      }
+
+      .delete-chat:hover {
+        background: rgba(239, 68, 68, 0.3);
+        transform: scale(1.1);
       }
     </style>
   </head>
@@ -498,7 +564,9 @@
       <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
           <div class="sidebar-title">Chat History</div>
-          <button class="new-chat-btn" onclick="createNewChat()">+ New Chat</button>
+          <button class="new-chat-btn" onclick="createNewChat()">
+            + New Chat
+          </button>
         </div>
         <div class="chat-history" id="chatHistory"></div>
       </div>
@@ -514,7 +582,15 @@
             <span class="username-text">{{ user.username }}</span>
           </div>
           <button class="logout-btn" onclick="handleLogout()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
               <polyline points="16 17 21 12 16 7"></polyline>
               <line x1="21" y1="12" x2="9" y2="12"></line>
@@ -539,13 +615,22 @@
               <h3>👋 Hello! I'm your Personal Assistant</h3>
               <p>How can I help you today?</p>
               <div class="suggestions">
-                <div class="suggestion-chip" onclick="sendSuggestion('Tell me about yourself')">
+                <div
+                  class="suggestion-chip"
+                  onclick="sendSuggestion('Tell me about yourself')"
+                >
                   Tell me about yourself
                 </div>
-                <div class="suggestion-chip" onclick="sendSuggestion('What can you help me with?')">
+                <div
+                  class="suggestion-chip"
+                  onclick="sendSuggestion('What can you help me with?')"
+                >
                   What can you help me with?
                 </div>
-                <div class="suggestion-chip" onclick="sendSuggestion('Give me some tips')">
+                <div
+                  class="suggestion-chip"
+                  onclick="sendSuggestion('Give me some tips')"
+                >
                   Give me some tips
                 </div>
               </div>
@@ -554,11 +639,23 @@
 
           <div class="chat-input">
             <div class="input-wrapper">
-              <input type="text" id="messageInput" placeholder="Type your message here..." autocomplete="off"/>
+              <input
+                type="text"
+                id="messageInput"
+                placeholder="Type your message here..."
+                autocomplete="off"
+              />
               <button class="emoji-btn" onclick="insertEmoji()">😊</button>
             </div>
             <button id="sendButton">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
                 <line x1="22" y1="2" x2="11" y2="13"></line>
                 <polygon points="22,11 13,22 2,11"></polygon>
               </svg>
@@ -567,6 +664,7 @@
         </div>
       </div>
     </div>
+
 
     <script>
       // Global state
@@ -781,5 +879,8 @@
         });
       }
     </script>
+=======
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+>>>>>>> efe4bad7e2806f2423f7ae8e0354dabaaa281f54
   </body>
 </html>
