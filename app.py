@@ -1,24 +1,47 @@
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
+import os
+import certifi
+import traceback
 from datetime import datetime
-from flask import Flask, render_template, redirect, url_for, request, session, flash
+from functools import wraps
+
+# Fix SSL issue for HuggingFace downloads
+os.environ["SSL_CERT_FILE"] = certifi.where()
+
+from flask import Flask, render_template, jsonify, redirect, url_for, request, session, flash
+from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
 from itsdangerous import URLSafeTimedSerializer
 from dotenv import load_dotenv
-import os
-
-from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from src.helper import load_pdf_file, filter_to_minimal_docs, text_split
+
+from authlib.integrations.flask_client import OAuth
+
+# LangChain + RAG
+from src.helper import (
+    download_hugging_face_embeddings,
+    load_pdf_file,
+    filter_to_minimal_docs,
+    text_split
+)
+
+from src.prompt import system_prompt
+
+from langchain_pinecone import PineconeVectorStore
+from langchain_groq import ChatGroq
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+
+from pinecone import Pinecone
+
 import tempfile
 import shutil
-from authlib.integrations.flask_client import OAuth
-import traceback
-
 
 load_dotenv()
 
 app = Flask(__name__)
+
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-for-local-testing-2026')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///personal_assistant.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -33,16 +56,18 @@ app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME")
 app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD")
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv("MAIL_USERNAME")
 
+app.config['UPLOAD_FOLDER'] = 'uploads/'
+
 db = SQLAlchemy(app)
 mail = Mail(app)
 
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # ✅ BULLETPROOF SERIALIZER - Works with ALL itsdangerous versions
 def get_reset_serializer():
     return URLSafeTimedSerializer(app.config['SECRET_KEY'], salt='password-reset-salt')
 
 ALLOWED_EXTENSIONS = {'pdf'}
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # -------------------------
 # GOOGLE OAUTH SETUP
@@ -174,24 +199,41 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+
+def role_required(role):
+    from functools import wraps
+
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+
+            if 'user_id' not in session:
+                return redirect(url_for('login'))
+
+            user = User.query.get(session['user_id'])
+
+            if not user:
+                session.clear()
+                return redirect(url_for('login'))
+
+            if user.role != role:
+                return redirect(url_for('dashboard'))
+
+            return f(*args, **kwargs)
+
+        return decorated
+    return decorator
+
 # ✅ PRODUCTION-READY EMAIL with HTML + Debug link
-def send_reset_email(email, reset_url):
-    print(f"📧 SENDING to: {email}")
-    print(f"📧 Using: {app.config['MAIL_USERNAME'][:3]}...@{app.config['MAIL_SERVER']}")
-    print(f"📧 Port: {app.config['MAIL_PORT']}, TLS: {app.config['MAIL_USE_TLS']}")
-    
+def send_reset_email(email, reset_url):  
     try:
         msg = Message("🔐 Password Reset", sender=app.config['MAIL_USERNAME'], recipients=[email])
         msg.html = f"<h2>Reset Password</h2><a href='{reset_url}' style='background:#3b82f6;color:white;padding:12px 24px;border-radius:8px;'>Reset Password</a>"
         msg.body = f"Reset: {reset_url}"
         
         mail.send(msg)
-        print(f"✅ EMAIL SUCCESS → {email}")
-        print(f"🔗 {reset_url}")
         return True
     except Exception as e:
-        print(f"❌ EMAIL FAILED: {str(e)}")
-        print(f"📧 CONFIG: USER={app.config['MAIL_USERNAME'][:3]}... PORT={app.config['MAIL_PORT']}")
         return False
 
 @app.route('/')
@@ -200,31 +242,40 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+
     if request.method == 'POST':
+
         identifier = request.form.get('username', '').strip()
         password = request.form.get('password')
-        
+
         if not identifier or not password:
             flash('Please enter username/email and password!', 'error')
             return render_template('login.html')
-        
-        print(f"🔍 LOGIN: identifier='{identifier}'")
-        
+
+        # allow login using username OR email
         user = User.query.filter(
             (User.username == identifier) | (User.email == identifier)
         ).first()
-        
-        print(f"🔍 USER FOUND: {user.username if user else 'NONE'}")
-        
+
         if user and user.check_password(password):
-            print("✅ PASSWORD OK!")
+
+
             session['user_id'] = user.id
+            session['role'] = user.role
+
             flash('Login successful! Welcome back.', 'success')
-            return redirect(url_for('dashboard'))
+
+            # ADMIN PANEL
+            if user.role == 'admin':
+                return redirect(url_for('admin'))
+
+            # USER DASHBOARD
+            else:
+                return redirect(url_for('dashboard'))
+
         else:
-            print("❌ PASSWORD FAILED!")
             flash('Invalid username, email, or password!', 'error')
-    
+
     return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -261,7 +312,6 @@ def register():
             except Exception as e:
                 db.session.rollback()
                 flash('Registration failed. Try again.', 'error')
-                print(f"❌ REGISTRATION ERROR: {e}")
     
     return render_template('register.html')
 
@@ -285,7 +335,6 @@ def forgot_password():
                 else:
                     flash('❌ Email failed. Check console for manual link.', 'error')
             except Exception as e:
-                print(f"🔴 TOKEN ERROR: {e}")
                 flash('Failed to send reset link. Try again.', 'error')
         else:
             flash('No account found with that email. Register first?', 'error')
@@ -296,24 +345,19 @@ def reset_password(token):
     try:
         s = get_reset_serializer()
         email = s.loads(token, max_age=3600)
-        print(f"✅ VALID TOKEN → EMAIL: {email}")
     except Exception as e:
-        print(f"🔴 TOKEN ERROR: {e}")
         flash('❌ Invalid or expired link! Request a new one.', 'error')
         return redirect(url_for('login'))
     
     user = User.query.filter_by(email=email).first()
     if not user:
-        print(f"🔴 USER NOT FOUND: {email}")
         flash('User not found! Please register.', 'error')
         return redirect(url_for('login'))
     
     if request.method == 'POST':
         password = request.form.get('password', '').strip()
         confirm = request.form.get('confirm_password', '').strip()
-        
-        print(f"🔧 RESET REQUEST for: {user.username}")
-        
+                
         if not password or len(password) < 6:
             flash('Password must be at least 6 characters!', 'error')
             return render_template('reset_password.html', token=token)
@@ -324,13 +368,11 @@ def reset_password(token):
         try:
             user.password_hash = generate_password_hash(password)
             db.session.commit()
-            print(f"✅ PASSWORD RESET SUCCESS: {user.username}")
             flash('🎉 Password reset successful! You can now login.', 'success')
             return redirect(url_for('login'))
         except Exception as e:
             db.session.rollback()
             flash('Reset failed. Try again.', 'error')
-            print(f"❌ RESET ERROR: {e}")
     
     return render_template('reset_password.html', token=token)
 
@@ -340,73 +382,19 @@ def dashboard():
 
     user_id = session['user_id']
     user = User.query.get(user_id)
+
     if not user:
         flash('Session expired. Please login again.', 'error')
         return redirect(url_for('login'))
+
+    # Admin panel
+    if user.role == "admin":
+        return redirect(url_for('admin'))
+
+    # Normal user panel
     return render_template('chat.html', user=user)
 
-    user = User.query.get(session['user_id'])
-    return render_template('chat.html', user=user)
 
-
-# -------------------------
-# NORMAL LOGIN
-# -------------------------
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-
-    if request.method == 'POST':
-
-        username = request.form.get('username')
-        password = request.form.get('password')
-
-        user = User.query.filter_by(username=username).first()
-
-        if user and user.check_password(password):
-            session['user_id'] = user.id
-            session['role'] = user.role
-            if user.role == 'admin':
-                return redirect(url_for('admin'))
-            elif user.role == 'user':
-                return render_template('chat.html', user=user)
-        flash('Invalid username or password', 'error')
-    return render_template('login.html')
-
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-
-    if request.method == 'POST':
-
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
-
-        existing_user = User.query.filter(
-            (User.username == username) | (User.email == email)
-        ).first()
-
-        if existing_user:
-            flash("User already exists")
-            return redirect(url_for('register'))
-
-        hashed_password = generate_password_hash(password)
-
-        user = User(
-            username=username,
-            email=email,
-            password_hash=hashed_password,
-            role="user"
-        )
-
-        db.session.add(user)
-        db.session.commit()
-
-        flash("Registration successful. Please login.")
-        return redirect(url_for('login'))
-
-    return render_template("register.html")
 # -------------------------
 # GOOGLE LOGIN
 # -------------------------
@@ -601,54 +589,8 @@ def logout():
     flash('Logged out successfully!', 'success')
     return redirect(url_for('login'))
 
-@app.route('/debug-users')
-def debug_users():
-    users = User.query.all()
-    return f"""
-    <h1>👥 All Users</h1>
-    <pre style="background:#1f2937;color:#f1f5f9;padding:20px;border-radius:8px;">
-USERS ({len(users)}):
-{chr(10).join([f"• {u.username} ({u.email}) - {u.role}" for u in users])}
-    </pre>
-    <a href="/">← Back to Login</a>
-    """
-
-@app.route('/test-email')
-def test_email():
-    try:
-        msg = Message("Test Email", recipients=["test@example.com"], sender=app.config['MAIL_USERNAME'])
-        msg.body = "Test successful!"
-        mail.send(msg)
-        return "✅ EMAIL WORKS!"
-    except Exception as e:
-        return f"❌ EMAIL ERROR: {str(e)}"
-    
-
 
 if __name__ == '__main__':
-    with app.app_context():
-        print("🧹 Wiping old database...")
-        db.drop_all()
-        db.create_all()
-        
-        # ✅ Create test user
-        if User.query.first() is None:
-            test_user = User(
-                username="testuser",
-                email="test@example.com",
-                password_hash=generate_password_hash("test123"),
-                role="user"
-            )
-            db.session.add(test_user)
-            db.session.commit()
-            print("✅ TEST USER CREATED: testuser / test123")
-        else:
-            print("✅ Database ready with existing users")
-    
-    print("\n🚀 Server ready!")
-    print("📱 Login: http://127.0.0.1:5000")
-    print("🔍 Debug users: http://127.0.0.1:5000/debug-users")
-    print("👤 Test login: testuser / test123")
-    print("-" * 60)
-    
+    # with app.app_context():
+    #     db.create_all()
     app.run(host="0.0.0.0", port=5000, debug=True)
