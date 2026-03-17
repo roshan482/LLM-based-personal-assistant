@@ -556,6 +556,53 @@
         background: rgba(239, 68, 68, 0.3);
         transform: scale(1.1);
       }
+
+      .message-bubble p {
+        margin-bottom: 10px;
+      }
+
+      .message-bubble ul {
+        padding-left: 20px;
+      }
+
+      .message-bubble li {
+        margin-bottom: 6px;
+      }
+
+      .message-bubble strong {
+        color: #60a5fa;
+      }
+
+      .profile-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        justify-content: center;
+        align-items: center;
+        z-index: 999;
+      }
+
+      .profile-content {
+        background: #1e293b;
+        padding: 30px;
+        border-radius: 12px;
+        width: 320px;
+        text-align: center;
+      }
+
+      .profile-content button {
+        margin-top: 15px;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 8px;
+        background: #3b82f6;
+        color: white;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -575,9 +622,13 @@
       <div class="main-content">
         <!-- Navigation Header -->
         <nav class="nav-header">
-          <div class="user-info">
+          <div
+            class="user-info"
+            onclick="openProfileModal()"
+            style="cursor: pointer"
+          >
             <div class="user-avatar">
-              <span class="avatar-initial">{{ user.username[0] }}</span>
+              <span class="avatar-initial">{{ user.username[:1] }}</span>
             </div>
             <span class="username-text">{{ user.username }}</span>
           </div>
@@ -664,223 +715,26 @@
         </div>
       </div>
     </div>
+    <!-- Profile Modal -->
+    <div id="profileModal" class="profile-modal">
+      <div class="profile-content">
+        <h2>User Profile</h2>
 
+        <p><strong>Username:</strong> {{ user.username }}</p>
+        <p><strong>Email:</strong> {{ user.email }}</p>
+        <p><strong>Role:</strong> {{ user.role }}</p>
 
-    <script>
-      // Global state
-      const USER_ID = '{{ user.username }}';
-      let currentChatId = 'default';
-      let chats = JSON.parse(localStorage.getItem(`chatHistory_${USER_ID}`)) || [];
-      
-      // Initialize
-      document.addEventListener('DOMContentLoaded', function() {
-        loadChatHistory();
-        loadCurrentChat();
-        setupEventListeners();
-      });
+        <button onclick="requestAdminAccess()" id="adminRequestBtn">
+          Request Admin Access
+        </button>
 
-      function setupEventListeners() {
-        const messageInput = document.getElementById('messageInput');
-        const sendButton = document.getElementById('sendButton');
-        const sidebar = document.getElementById('sidebar');
-        
-        messageInput.addEventListener('keypress', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-          }
-        });
-        
-        sendButton.addEventListener('click', sendMessage);
-        messageInput.addEventListener('input', () => {
-          sendButton.disabled = !messageInput.value.trim();
-        });
-        
-        // Toggle sidebar on mobile
-        document.addEventListener('click', (e) => {
-          if (e.target.matches('.sidebar-toggle, .sidebar-toggle *')) {
-            sidebar.classList.toggle('open');
-          }
-        });
-      }
+        <p id="requestStatus"></p>
 
-      function generateId() {
-        return 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      }
-
-      function saveChatHistory() {
-        localStorage.setItem(`chatHistory_${USER_ID}`, JSON.stringify(chats));
-        loadChatHistory();
-      }
-
-      function loadChatHistory() {
-        const chatHistory = document.getElementById('chatHistory');
-        chatHistory.innerHTML = '';
-        
-        chats.forEach(chat => {
-          const chatItem = document.createElement('div');
-          chatItem.className = `chat-item ${chat.id === currentChatId ? 'active' : ''}`;
-          chatItem.onclick = () => loadChat(chat.id);
-          chatItem.innerHTML = `
-            <div class="chat-avatar">${chat.title[0] || 'C'}</div>
-            <div>
-              <div class="chat-preview">${chat.title}</div>
-              <div class="chat-time">${formatTime(chat.lastUpdated)}</div>
-            </div>
-          `;
-          chatHistory.appendChild(chatItem);
-        });
-      }
-
-      function createNewChat() {
-        const newChatId = generateId();
-        const newChat = {
-          id: newChatId,
-          title: 'New Chat',
-          messages: [],
-          created: Date.now(),
-          lastUpdated: Date.now()
-        };
-        
-        chats.unshift(newChat);
-        currentChatId = newChatId;
-        saveChatHistory();
-        clearChat();
-        document.getElementById('chatTitle').textContent = 'New Chat';
-      }
-
-      function loadChat(chatId) {
-        const chat = chats.find(c => c.id === chatId);
-        if (chat) {
-          currentChatId = chatId;
-          document.getElementById('chatTitle').textContent = chat.title;
-          renderMessages(chat.messages);
-          saveChatHistory();
-        }
-      }
-
-      function loadCurrentChat() {
-        if (chats.length > 0) {
-          currentChatId = chats[0].id;
-          document.getElementById('chatTitle').textContent = chats[0].title;
-          renderMessages(chats[0].messages);
-        }
-      }
-
-      function sendMessage() {
-        const messageInput = document.getElementById('messageInput');
-        const message = messageInput.value.trim();
-        if (!message) return;
-
-        // Add user message
-        addMessage(message, 'user');
-        messageInput.value = '';
-
-        // Update current chat
-        const chat = chats.find(c => c.id === currentChatId) || chats[0];
-        if (chat) {
-          chat.messages.push({ role: 'user', content: message, timestamp: Date.now() });
-          chat.lastUpdated = Date.now();
-          if (chat.title === 'New Chat' || chat.title === 'Untitled') {
-            chat.title = message.length > 30 ? message.substring(0, 30) + '...' : message;
-          }
-          saveChatHistory();
-        }
-
-        // Simulate AI response
-        const sendButton = document.getElementById('sendButton');
-        sendButton.disabled = true;
-        
-        setTimeout(() => {
-          const response = `Thanks for your message: "${message}". I'm here to help with coding, projects, and more!`;
-          addMessage(response, 'assistant');
-          
-          if (chat) {
-            chat.messages.push({ role: 'assistant', content: response, timestamp: Date.now() });
-            chat.lastUpdated = Date.now();
-            saveChatHistory();
-          }
-          
-          sendButton.disabled = false;
-          messageInput.focus();
-        }, 800);
-      }
-
-
-      function getUserInitial() {
-        return '${{ user.username[0] }}';
-        }
-
-      function addMessage(content, role) {
-        const chatMessages = document.getElementById('chatMessages');
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${role}`;
-        
-        messageDiv.innerHTML = `
-          <div class="message-avatar">${role === 'user' ? '${getUserInitial()}' : '🤖'}</div>
-          <div class="message-bubble">${content}</div>
-      `;
-
-
-        
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        chatMessages.querySelector('.welcome-message')?.remove();
-      }
-
-      function renderMessages(messages) {
-        const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = '';
-        
-        messages.forEach(msg => {
-          addMessage(msg.content, msg.role);
-        });
-        
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      }
-
-      function clearChat() {
-        const chatMessages = document.getElementById('chatMessages');
-        chatMessages.innerHTML = `
-          <div class="welcome-message">
-            <h3>👋 New Conversation</h3>
-            <p>Start chatting with your assistant!</p>
-            <div class="suggestions">
-              <div class="suggestion-chip" onclick="sendSuggestion('Tell me about yourself')">Tell me about yourself</div>
-              <div class="suggestion-chip" onclick="sendSuggestion('What can you help me with?')">What can you help me with?</div>
-              <div class="suggestion-chip" onclick="sendSuggestion('Give me some tips')">Give me some tips</div>
-            </div>
-          </div>
-        `;
-      }
-
-      function sendSuggestion(text) {
-        document.getElementById('messageInput').value = text;
-        sendMessage();
-      }
-
-      function insertEmoji() {
-        document.getElementById('messageInput').value += ' 😊';
-        document.getElementById('messageInput').focus();
-      }
-
-      function handleLogout() {
-        if (confirm('Are you sure you want to logout?')) {
-          window.location.href = '/logout';
-        }
-      }
-
-      function formatTime(timestamp) {
-        return new Date(timestamp).toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-      }
-    </script>
-=======
+        <button onclick="closeProfileModal()">Close</button>
+      </div>
+    </div>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
->>>>>>> efe4bad7e2806f2423f7ae8e0354dabaaa281f54
   </body>
 </html>

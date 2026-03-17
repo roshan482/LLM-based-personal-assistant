@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Assistant - AI Chatbot</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Landing Page - EXACT SAME UI */
+        .min-h-screen {
+            min-height: 100vh;
+        }
+
+        .bg-cover {
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        .bg-center {
+            background-position: center;
+        }
+
+        .relative {
+            position: relative;
+        }
+
+        /* Background Image + Overlay - SAME DESIGN */
+        .hero-bg {
+            background-image: url('https://images.unsplash.com/photo-1449824913935-59a10b8d2000?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80');
+            min-height: 100vh;
+        }
+
+        .dark-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.70);
+            z-index: 1;
+        }
+
+        /* Navbar - IDENTICAL */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 50;
+            backdrop-filter: blur(12px);
+            background: rgba(0,0,0,0.40);
+            border-bottom: 1px solid rgba(255,255,255,0.20);
+            transition: all 0.5s ease;
+        }
+
+        .navbar:hover {
+            background: rgba(59,130,246,0.90);
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .logo:hover {
+            color: #bfdbfe;
+            letter-spacing: 0.05em;
+        }
+
+        .desktop-menu {
+            display: none;
+            gap: 2rem;
+            font-weight: 500;
+            color: white;
+        }
+
+        @media (min-width: 768px) {
+            .desktop-menu {
+                display: flex;
+            }
+            .nav-container {
+                padding: 1rem 3rem;
+            }
+        }
+
+        .menu-btn {
+            display: block;
+            color: white;
+            font-size: 1.5rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+
+        @media (min-width: 768px) {
+            .menu-btn {
+                display: none;
+            }
+        }
+
+        .mobile-menu {
+            display: none;
+            flex-direction: column;
+            background: rgba(0,0,0,0.90);
+            gap: 1rem;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .menu-open .mobile-menu {
+            display: flex;
+        }
+
+        .nav-btn {
+            color: white;
+            background: none;
+            border: none;
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-radius: 0.5rem;
+        }
+
+        .nav-btn:hover {
+            color: #bfdbfe;
+        }
+
+        .register-btn {
+            padding: 0.5rem 1.25rem !important;
+            border: 1px solid white !important;
+            border-radius: 0.5rem !important;
+        }
+
+        .register-btn:hover {
+            background: rgba(59,130,246,0.6) !important;
+            border-color: rgba(59,130,246,0.8) !important;
+            color: white !important;
+            transform: translateY(-2px);
+        }
+
+        /* Hero Content */
+        .hero-content {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 100vh;
+            padding: 2rem 1.5rem 4rem;
+        }
+
+        .hero-title {
+            font-size: clamp(1.5rem, 5vw, 3rem);
+            font-weight: 800;
+            color: white;
+            margin-bottom: 1.5rem;
+            max-width: 60rem;
+            line-height: 1.2;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 3vw, 1.25rem);
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 2rem;
+            max-width: 32rem;
+        }
+
+        .trust-badges {
+            font-size: 0.875rem;
+            color: #93c5fd;
+            margin-bottom: 3rem;
+        }
+
+        /* Feature Cards */
+        .features-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+            max-width: 64rem;
+        }
+
+        @media (min-width: 640px) {
+            .features-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .feature-card {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            border-color: rgba(59,130,246,0.5);
+        }
+
+        .feature-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #bfdbfe;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-desc {
+            font-size: 0.875rem;
+            color: rgba(255,255,255,0.8);
+        }
+
+        /* CTA Buttons */
+        .cta-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 3rem;
+        }
+
+        @media (min-width: 640px) {
+            .cta-buttons {
+                flex-direction: row;
+            }
+        }
+
+        .cta-primary {
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+            border: none;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(59,130,246,0.4);
+        }
+
+        .cta-primary:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(59,130,246,0.6);
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+        }
+
+        .cta-secondary {
+            padding: 1rem 2rem;
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .cta-secondary:hover {
+            background: white;
+            color: #1f2937;
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        /* Quote Section */
+        .quote-section {
+            max-width: 48rem;
+            padding: 1.5rem;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(12px);
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .quote-text {
+            font-size: clamp(1rem, 2.5vw, 1.25rem);
+            font-style: italic;
+            color: #bfdbfe;
+            font-weight: 300;
+            line-height: 1.6;
+        }
+
+        .quote-author {
+            margin-top: 1rem;
+            font-size: 0.875rem;
+            color: rgba(255,255,255,0.7);
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+
+        /* Footer */
+        .footer {
+            background: linear-gradient(135deg, #1e3a8a, #1e40af);
+            color: white;
+            text-align: center;
+            padding: 2rem 1.5rem;
+        }
+
+        .footer-links {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (min-width: 640px) {
+            .footer-links {
+                flex-direction: row;
+                justify-content: center;
+            }
+        }
+
+        .footer-link {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: #bfdbfe;
+        }
+
+        .footer-text {
+            font-size: 0.875rem;
+            opacity: 0.9;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fadeInUp {
+            animation: fadeInUp 0.8s ease-out forwards;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen bg-cover bg-center relative hero-bg">
+        <!-- Dark Overlay -->
+        <div class="dark-overlay"></div>
+
+        <!-- Navbar -->
+        <nav class="navbar" id="navbar">
+            <div class="nav-container">
+                <!-- Logo -->
+                <h1 class="logo" onclick="window.location.href='/'">
+                    <i class="fas fa-robot mr-2"></i>Personal Assistant
+                </h1>
+
+                <!-- Desktop Menu -->
+                <div class="desktop-menu">
+                    <button class="nav-btn" onclick="window.location.href='/login'">
+                        Login
+                    </button>
+                    <button class="nav-btn register-btn" onclick="window.location.href='/register'">
+                        Register
+                    </button>
+                </div>
+
+                <!-- Mobile Menu Button -->
+                <button class="menu-btn" onclick="toggleMobileMenu()">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+
+            <!-- Mobile Dropdown -->
+            <div class="mobile-menu" id="mobileMenu">
+                <button class="nav-btn" onclick="window.location.href='/login'">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Login
+                </button>
+                <button class="nav-btn register-btn" onclick="window.location.href='/register'">
+                    <i class="fas fa-user-plus mr-2"></i>Register
+                </button>
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <div class="hero-content">
+            <!-- Main Title -->
+            <h1 class="hero-title animate-fadeInUp">
+                Your Personal AI Assistant
+            </h1>
+
+            <!-- Subtitle -->
+            <p class="hero-subtitle animate-fadeInUp" style="animation-delay: 0.2s;">
+                Get instant help with coding, software testing, Python, competitive programming, 
+                and your uploaded documents through our intelligent chat platform.
+            </p>
+
+            <!-- Trust Signals -->
+            <p class="trust-badges animate-fadeInUp" style="animation-delay: 0.4s;">
+                🤖 AI-Powered • 🎓 Diploma Focused • 📚 Document Chat • ⚡ Instant Answers
+            </p>
+
+            <!-- Feature Highlights -->
+            <div class="features-grid animate-fadeInUp" style="animation-delay: 0.6s;">
+                <div class="feature-card">
+                    <h3 class="feature-title"><i class="fas fa-brain text-indigo-400 mr-2"></i>Smart Answers</h3>
+                    <p class="feature-desc">Python, testing, software engineering, competitive programming</p>
+                </div>
+                <div class="feature-card">
+                    <h3 class="feature-title"><i class="fas fa-file-pdf text-indigo-400 mr-2"></i>Document Chat</h3>
+                    <p class="feature-desc">Upload PDFs/notes and chat with your study materials</p>
+                </div>
+                <div class="feature-card">
+                    <h3 class="feature-title"><i class="fas fa-comments text-indigo-400 mr-2"></i>Live Chat</h3>
+                    <p class="feature-desc">Real-time conversations with context memory</p>
+                </div>
+            </div>
+
+            <!-- CTA Buttons -->
+            <div class="cta-buttons animate-fadeInUp" style="animation-delay: 0.8s;">
+                <button class="cta-primary" onclick="window.location.href='/register'">
+                    <i class="fas fa-rocket mr-2"></i>Get Started Free
+                </button>
+                <button class="cta-secondary" onclick="window.location.href='/login'">
+                    <i class="fas fa-sign-in-alt mr-2"></i>Login Now
+                </button>
+            </div>
+
+            <!-- Quote Section -->
+            <div class="quote-section animate-fadeInUp" style="animation-delay: 1s;">
+                <p class="quote-text">
+                    "Your study companion - smarter than notes, faster than Google, always ready to help."
+                </p>
+                <p class="quote-author">
+                    — Personal Assistant AI
+                </p>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-links">
+                <a href="#" class="footer-link">Privacy Policy</a>
+                <a href="#" class="footer-link">Terms of Use</a>
+                <a href="#" class="footer-link">Contact</a>
+                <a href="/dashboard" class="footer-link"><i class="fas fa-robot mr-1"></i>Live Demo</a>
+            </div>
+            <p class="footer-text">
+                © 2026 Personal Assistant | Built for Computer Engineering Students | All Rights Reserved
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // Mobile menu toggle
+        function toggleMobileMenu() {
+            document.getElementById('navbar').classList.toggle('menu-open');
+        }
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 100) {
+                navbar.style.background = 'rgba(15,23,42,0.95)';
+            } else {
+                navbar.style.background = 'rgba(0,0,0,0.40)';
+            }
+        });
+
+        // Animate elements on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Observe feature cards
+        document.querySelectorAll('.feature-card').forEach(card => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = 'all 0.6s ease';
+            observer.observe(card);
+        });
+
+        // Preload critical resources
+        window.addEventListener('load', () => {
+            console.log('✅ Personal Assistant Landing Loaded');
+        });
+    </script>
+</body>
+</html>

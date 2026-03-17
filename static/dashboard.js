@@ -79,7 +79,7 @@ async function deleteChat(chatId, event) {
 let chatMessages, messageInput, sendButton;
 
 // Wait for DOM to load before initializing
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
   chatMessages = document.getElementById("chatMessages");
   messageInput = document.getElementById("messageInput");
   sendButton = document.getElementById("sendButton");
@@ -104,9 +104,11 @@ document.addEventListener("DOMContentLoaded", function () {
     loadDocuments();
   }
 
-  loadChatHistory();
-  createNewChat();
-
+  await initializeChat();
+  // loadChatHistory();
+  // createNewChat();
+  loadNotifications();
+  loadRequests();
   console.log("Dashboard JS initialized successfully");
 });
 
@@ -114,6 +116,33 @@ document.addEventListener("DOMContentLoaded", function () {
 // COMMON FUNCTIONS
 // ==============================================
 
+async function createNewChat() {
+  const response = await fetch("/chat/new");
+  const data = await response.json();
+
+  currentSession = data.session_id;
+
+  chatMessages.innerHTML = "";
+
+  loadChatHistory();
+}
+
+// ADD THIS FUNCTION HERE
+async function initializeChat() {
+  const response = await fetch("/chat/history");
+
+  const chats = await response.json();
+
+  if (chats.length > 0) {
+    currentSession = chats[0].id;
+
+    await loadChat(currentSession);
+
+    loadChatHistory();
+  } else {
+    await createNewChat();
+  }
+}
 function handleLogout() {
   if (confirm("Are you sure you want to logout?")) {
     localStorage.clear();
@@ -137,18 +166,17 @@ function scrollToBottom() {
 }
 
 function addMessage(text, isUser = false) {
-  const welcomeMsg = chatMessages.querySelector(".welcome-message");
-  if (welcomeMsg) welcomeMsg.remove();
-
   const messageDiv = document.createElement("div");
   messageDiv.className = `message ${isUser ? "user" : "assistant"}`;
+
+  const formattedText = isUser ? text : marked.parse(text);
 
   messageDiv.innerHTML = `
       <div class="message-avatar">
         ${isUser ? "🧑" : "🤖"}
       </div>
       <div class="message-bubble">
-        ${text}
+        ${formattedText}
       </div>
   `;
 
@@ -162,18 +190,20 @@ function typeWriter(text) {
 
   messageDiv.innerHTML = `
       <div class="message-avatar">🤖</div>
-      <div class="message-bubble" id="typingText"></div>
+      <div class="message-bubble"></div>
   `;
 
   chatMessages.appendChild(messageDiv);
 
-  const typingText = messageDiv.querySelector("#typingText");
+  const bubble = messageDiv.querySelector(".message-bubble");
 
   let i = 0;
+  let currentText = "";
 
   function typing() {
     if (i < text.length) {
-      typingText.innerHTML += text.charAt(i);
+      currentText += text.charAt(i);
+      bubble.innerHTML = marked.parse(currentText);
       i++;
       scrollToBottom();
       setTimeout(typing, 15);
@@ -438,3 +468,207 @@ async function deleteDoc(docId) {
 
 // Make deleteDoc global so it can be called from HTML
 window.deleteDoc = deleteDoc;
+
+function openSection(section) {
+  document.querySelectorAll(".section").forEach((s) => {
+    s.classList.remove("active");
+  });
+
+  document.getElementById(section + "-section").classList.add("active");
+
+  document.querySelectorAll(".menu-item").forEach((i) => {
+    i.classList.remove("active");
+  });
+
+  event.target.classList.add("active");
+}
+
+function toggleNotifications() {
+  openSection("notifications");
+}
+
+// ===============================
+// PROFILE MODAL FUNCTIONS
+// ===============================
+
+function openProfileModal() {
+  const modal = document.getElementById("profileModal");
+  if (modal) {
+    modal.style.display = "flex";
+  }
+}
+
+function closeProfileModal() {
+  const modal = document.getElementById("profileModal");
+  if (modal) {
+    modal.style.display = "none";
+  }
+}
+
+async function requestAdminAccess() {
+  try {
+    const response = await fetch("/admin/request", {
+      method: "POST",
+    });
+
+    const data = await response.json();
+
+    const status = document.getElementById("requestStatus");
+    if (status) {
+      status.innerText = data.message;
+    }
+  } catch (err) {
+    console.error("Admin request failed", err);
+  }
+}
+
+async function loadNotifications() {
+  const response = await fetch("/admin/notifications");
+
+  const data = await response.json();
+
+  const container = document.getElementById("notifications-section");
+
+  const count = document.getElementById("notifCount");
+
+  if (count) {
+    count.innerText = data.length;
+  }
+
+  container.innerHTML = "<h2>Notifications</h2>";
+
+  data.forEach((n) => {
+    const div = document.createElement("div");
+
+    div.className = "notification";
+
+    div.innerHTML = `${n.text} <small>${n.time}</small>`;
+
+    container.appendChild(div);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  loadNotifications();
+  loadRequests();
+});
+
+async function loadRequests() {
+  const response = await fetch("/admin/requests");
+
+  const requests = await response.json();
+
+  const container = document.getElementById("requestList");
+
+  container.innerHTML = "";
+
+  requests.forEach((r) => {
+    const div = document.createElement("div");
+
+    div.className = "notification";
+
+    div.innerHTML = `
+        <strong>${r.username}</strong> (${r.email})
+
+        <br><br>
+
+        <button onclick="approveRequest(${r.id})">Approve</button>
+
+        <button onclick="rejectRequest(${r.id})">Reject</button>
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+async function approveRequest(id) {
+  await fetch(`/admin/approve/${id}`, {
+    method: "POST",
+  });
+
+  loadRequests();
+  loadNotifications();
+}
+
+async function rejectRequest(id) {
+  await fetch(`/admin/reject/${id}`, {
+    method: "POST",
+  });
+
+  loadRequests();
+}
+
+function toggleNotificationPopup() {
+  const popup = document.getElementById("notificationPopup");
+
+  if (popup.style.display === "block") {
+    popup.style.display = "none";
+  } else {
+    popup.style.display = "block";
+    loadNotificationPopup();
+  }
+}
+
+async function loadNotificationPopup() {
+  const response = await fetch("/admin/notifications");
+
+  const data = await response.json();
+
+  const list = document.getElementById("notificationList");
+
+  const badge = document.getElementById("notifCount");
+
+  list.innerHTML = "";
+
+  if (badge) {
+    badge.innerText = data.length;
+  }
+
+  data.forEach((n) => {
+    const div = document.createElement("div");
+
+    div.className = "notification-item";
+
+    div.innerHTML = `
+${n.text}
+<br>
+<small>${n.time}</small>
+`;
+
+    list.appendChild(div);
+  });
+}
+
+const socket = io();
+
+socket.on("new_notification", function (data) {
+  const badge = document.getElementById("notifCount");
+  const list = document.getElementById("notificationList");
+
+  if (badge) {
+    badge.innerText = parseInt(badge.innerText || 0) + 1;
+  }
+
+  if (list) {
+    const div = document.createElement("div");
+
+    div.className = "notification-item";
+
+    div.innerHTML = `
+${data.text}
+<br>
+<small>${data.time}</small>
+`;
+
+    list.prepend(div);
+  }
+});
+
+const sidebar = document.querySelector(".sidebar");
+const toggleBtn = document.querySelector(".menu-toggle");
+
+if (toggleBtn) {
+  toggleBtn.addEventListener("click", () => {
+    sidebar.classList.toggle("collapsed");
+  });
+}

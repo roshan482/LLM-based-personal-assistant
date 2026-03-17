@@ -1,3 +1,5 @@
+from src.helper import load_document
+from flask_socketio import SocketIO, emit
 import os
 import certifi
 import traceback
@@ -20,9 +22,11 @@ from authlib.integrations.flask_client import OAuth
 # LangChain + RAG
 from src.helper import (
     download_hugging_face_embeddings,
-    load_pdf_file,
+    load_document,
     filter_to_minimal_docs,
-    text_split
+    text_split,
+    text_split_large,
+    process_chunks_in_batches,
 )
 
 from src.prompt import system_prompt
@@ -33,15 +37,20 @@ from langchain_classic.chains import create_retrieval_chain
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 
-from pinecone import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 
 import tempfile
 import shutil
+import threading
+
+# Max upload size: 50 MB
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 load_dotenv()
 
 app = Flask(__name__)
 
+socketio = SocketIO(app, cors_allowed_origins="*")
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-for-local-testing-2026')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///personal_assistant.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -67,7 +76,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 def get_reset_serializer():
     return URLSafeTimedSerializer(app.config['SECRET_KEY'], salt='password-reset-salt')
 
-ALLOWED_EXTENSIONS = {'pdf'}
+ALLOWED_EXTENSIONS = {'pdf','txt','xlsx','png','jpg','jpeg'}
 
 # -------------------------
 # GOOGLE OAUTH SETUP
@@ -105,6 +114,20 @@ if GROQ_API_KEY:
 index_name = "personal-assistant"
 
 try:
+    # ✅ FIX: Initialize Pinecone client before using it
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+
+    # Create index if not exists
+    if index_name not in [i.name for i in pc.list_indexes()]:
+        pc.create_index(
+            name=index_name,
+            dimension=384,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
 
     embeddings = download_hugging_face_embeddings()
 
@@ -113,7 +136,7 @@ try:
         embedding=embeddings
     )
 
-    retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+    retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k": 6})
 
     chatModel = ChatGroq(
         model="llama-3.1-8b-instant",
@@ -180,6 +203,13 @@ class UploadedDocument(db.Model):
 
     user = db.relationship('User', backref='uploaded_documents')
 
+class AdminRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default="pending")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='admin_requests')
 
 # -------------------------
 # HELPERS
@@ -236,9 +266,13 @@ def send_reset_email(email, reset_url):
     except Exception as e:
         return False
 
+# @app.route('/')
+# def index():
+#     return redirect(url_for('login'))
+
 @app.route('/')
-def index():
-    return redirect(url_for('login'))
+def land():
+    return render_template('Landing_Page.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -395,6 +429,24 @@ def dashboard():
     return render_template('chat.html', user=user)
 
 
+@app.route('/user/profile')
+@login_required
+def user_profile():
+    """Returns the current user's profile as JSON for the chat UI."""
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({"success": False, "message": "User not found"}), 404
+    return jsonify({
+        "success": True,
+        "user": {
+            "id":       user.id,
+            "username": user.username,
+            "email":    user.email,
+            "role":     user.role
+        }
+    })
+
+
 # -------------------------
 # GOOGLE LOGIN
 # -------------------------
@@ -468,7 +520,404 @@ def admin():
         documents=documents
     )
 
+@app.route("/admin/request", methods=["POST"])
+@login_required
+def request_admin():
+    user_id = session["user_id"]
+    user = User.query.get(user_id)
 
+    existing = AdminRequest.query.filter_by(user_id=user_id).first()
+
+    if existing and existing.status == "pending":
+        return jsonify({"message": "Request already pending"})
+    if existing and existing.status == "approved":
+        return jsonify({"message": "You are already admin"})
+    if existing and existing.status == "rejected":
+        existing.status = "pending"
+        existing.created_at = datetime.utcnow()
+    else:
+        req = AdminRequest(user_id=user_id)
+        db.session.add(req)
+
+    db.session.commit()
+    socketio.emit("new_notification", {
+        "text": f"{user.username} requested admin access",
+        "time": datetime.utcnow().strftime("%H:%M")
+    })
+    return jsonify({"message": "Admin request sent"})
+
+@app.route("/admin/approve/<int:req_id>", methods=["POST"])
+@role_required("admin")
+def approve_request(req_id):
+
+    req = AdminRequest.query.get(req_id)
+
+    user = User.query.get(req.user_id)
+
+    user.role = "admin"
+    req.status = "approved"
+
+    db.session.commit()
+
+    return jsonify({"message": "User promoted to admin"})
+
+@app.route("/admin/reject/<int:req_id>", methods=["POST"])
+@role_required("admin")
+def reject_request(req_id):
+
+    req = AdminRequest.query.get(req_id)
+
+    req.status = "rejected"
+
+    db.session.commit()
+
+    return jsonify({"message": "Request rejected"})
+
+@app.route("/admin/notifications")
+@role_required("admin")
+def admin_notifications():
+
+    requests = AdminRequest.query.order_by(
+        AdminRequest.created_at.desc()
+    ).all()
+
+    uploads = UploadedDocument.query.order_by(
+        UploadedDocument.uploaded_at.desc()
+    ).all()
+
+    notifications = []
+
+    for r in requests:
+        notifications.append({
+            "text": f"{r.user.username} requested admin access",
+            "time": r.created_at.strftime("%H:%M"),
+            "type": "request"
+        })
+
+    for u in uploads:
+        user = User.query.get(u.uploaded_by)
+
+        notifications.append({
+            "text": f"{user.username} uploaded {u.filename}",
+            "time": u.uploaded_at.strftime("%H:%M"),
+            "type": "upload"
+        })
+
+    return jsonify(notifications)
+
+# In-memory progress store: { doc_id (int) -> progress_payload (dict) }
+# Written by the background thread, read by the polling endpoint.
+_upload_progress: dict = {}
+
+
+def _process_document_background(app_ctx, doc_id: int, filepath: str,
+                                  file_size: int, user_id: int, filename: str):
+    """
+    Runs in a daemon thread so the HTTP response is returned immediately.
+    Emits SocketIO events so the frontend can show a live progress bar.
+
+    KEY FIX: socketio.emit() is called with namespace='/' explicitly and
+    uses the eventlet/gevent-safe emit path. A in-memory progress dict
+    (_upload_progress) is also updated so the /admin/upload/status/<id>
+    polling endpoint always returns the real state — this acts as a
+    fallback when a SocketIO event is missed (race condition on connect).
+    """
+    def _emit(event: str, payload: dict):
+        # Update in-memory state FIRST (polling fallback)
+        _upload_progress[doc_id] = payload
+        # Then push via SocketIO — use namespace='/' to avoid silent failures
+        try:
+            socketio.emit(event, payload, namespace="/")
+        except Exception:
+            pass   # emit failure must never crash the processing thread
+
+    with app_ctx:
+        try:
+            # ── 1. Parse document ──────────────────────────────────────────
+            _emit("upload_progress", {
+                "doc_id": doc_id, "stage": "parsing",
+                "pct": 5, "label": "📄 Parsing document…"
+            })
+            documents = load_document(filepath)
+            docs      = filter_to_minimal_docs(documents)
+
+            # ── 2. Adaptive chunking (smaller chunks for large files) ──────
+            _emit("upload_progress", {
+                "doc_id": doc_id, "stage": "chunking",
+                "pct": 20, "label": "✂️ Splitting into chunks…"
+            })
+            chunks = text_split_large(docs, file_size_bytes=file_size)
+            total_chunks = len(chunks)
+
+            if docsearch is None:
+                raise RuntimeError(
+                    "Vector store not initialized — check PINECONE_API_KEY."
+                )
+
+            # ── 3. Parallel batch upsert to Pinecone ───────────────────────
+            _emit("upload_progress", {
+                "doc_id": doc_id, "stage": "indexing",
+                "pct": 25, "total_chunks": total_chunks,
+                "done_chunks": 0,
+                "label": f"🔗 Indexing 0 / {total_chunks} chunks…"
+            })
+
+            def _progress_cb(done: int, total: int):
+                pct = 25 + int((done / total) * 65)   # 25 → 90 %
+                _emit("upload_progress", {
+                    "doc_id":       doc_id,
+                    "stage":        "indexing",
+                    "pct":          pct,
+                    "done_chunks":  done,
+                    "total_chunks": total,
+                    "label":        f"🔗 Indexing {done} / {total} chunks…"
+                })
+
+            # Choose concurrency: more threads for large docs
+            workers  = 4 if total_chunks > 200 else 2
+            batch_sz = 50 if total_chunks > 200 else 30
+
+            processed = process_chunks_in_batches(
+                chunks,
+                batch_processor=docsearch.add_documents,
+                batch_size=batch_sz,
+                max_workers=workers,
+                progress_callback=_progress_cb,
+            )
+
+            # ── 4. Mark completed in DB ────────────────────────────────────
+            doc = UploadedDocument.query.get(doc_id)
+            doc.status       = "completed"
+            doc.chunks_count = processed
+            db.session.commit()
+
+            _emit("upload_progress", {
+                "doc_id":  doc_id,
+                "stage":   "done",
+                "pct":     100,
+                "label":   "✅ Done!",
+                "message": f"{filename} indexed ({processed} chunks)",
+                "success": True,
+            })
+
+        except Exception as exc:
+            traceback.print_exc()
+
+            try:
+                doc = UploadedDocument.query.get(doc_id)
+                if doc:
+                    doc.status = "failed"
+                    db.session.commit()
+            except Exception:
+                pass
+
+            _emit("upload_progress", {
+                "doc_id":  doc_id,
+                "stage":   "error",
+                "pct":     0,
+                "label":   "❌ Processing failed",
+                "message": str(exc),
+                "success": False,
+            })
+        finally:
+            # Clean up memory entry after a delay so late polls still see it
+            def _cleanup():
+                import time
+                time.sleep(30)
+                _upload_progress.pop(doc_id, None)
+            threading.Thread(target=_cleanup, daemon=True).start()
+
+
+@app.route("/admin/upload", methods=["POST"])
+@role_required("admin")
+def upload_document():
+
+    if "file" not in request.files:
+        return jsonify({"success": False, "message": "No file uploaded"})
+
+    file = request.files["file"]
+
+    if file.filename == "":
+        return jsonify({"success": False, "message": "No file selected"})
+
+    if not allowed_file(file.filename):
+        return jsonify({"success": False, "message": "Unsupported file type"})
+
+    # ── Size guard (read Content-Length header before streaming) ──────────
+    content_length = request.content_length
+    if content_length and content_length > MAX_UPLOAD_BYTES:
+        return jsonify({
+            "success": False,
+            "message": f"File too large. Maximum allowed size is "
+                       f"{MAX_UPLOAD_BYTES // (1024*1024)} MB."
+        })
+
+    try:
+        filename  = secure_filename(file.filename)
+        filepath  = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(filepath)
+
+        file_size = os.path.getsize(filepath)
+
+        # Second size check after save (Content-Length can be absent/spoofed)
+        if file_size > MAX_UPLOAD_BYTES:
+            os.remove(filepath)
+            return jsonify({
+                "success": False,
+                "message": f"File too large ({file_size // (1024*1024)} MB). "
+                           f"Maximum is {MAX_UPLOAD_BYTES // (1024*1024)} MB."
+            })
+
+        user_id = session["user_id"]
+
+        # Persist DB record immediately so the frontend can track it
+        doc = UploadedDocument(
+            filename          = filename,
+            original_filename = file.filename,
+            uploaded_by       = user_id,
+            file_size         = file_size,
+            status            = "processing",
+        )
+        db.session.add(doc)
+        db.session.commit()
+        doc_id = doc.id
+
+        # ── Kick off background processing thread ─────────────────────────
+        t = threading.Thread(
+            target=_process_document_background,
+            args=(app.app_context(), doc_id, filepath, file_size, user_id, filename),
+            daemon=True,
+        )
+        t.start()
+
+        # Return immediately — frontend polls via SocketIO events
+        return jsonify({
+            "success":  True,
+            "queued":   True,
+            "doc_id":   doc_id,
+            "message":  f"{filename} uploaded — processing in background…",
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"success": False, "message": str(e)})
+
+@app.route("/admin/upload/status/<int:doc_id>")
+@role_required("admin")
+def upload_status(doc_id):
+    """
+    Polling fallback — returns the latest progress snapshot for a given
+    doc_id.  The JS polls this every 2 s as a safety net in case a
+    SocketIO event was missed (e.g. emitted before the client connected).
+    Once the stage is 'done' or 'error' the DB record is the source of
+    truth, so we merge both sources.
+    """
+    # 1. Try live in-memory snapshot first
+    snapshot = _upload_progress.get(doc_id)
+    if snapshot:
+        return jsonify({"success": True, "progress": snapshot})
+
+    # 2. Fall back to DB record (covers the case where the thread finished
+    #    and the memory entry was already cleaned up)
+    doc = UploadedDocument.query.get(doc_id)
+    if not doc:
+        return jsonify({"success": False, "message": "Document not found"})
+
+    if doc.status == "completed":
+        return jsonify({"success": True, "progress": {
+            "doc_id":  doc_id,
+            "stage":   "done",
+            "pct":     100,
+            "label":   "✅ Done!",
+            "message": f"{doc.filename} indexed ({doc.chunks_count} chunks)",
+            "success": True,
+        }})
+
+    if doc.status == "failed":
+        return jsonify({"success": True, "progress": {
+            "doc_id":  doc_id,
+            "stage":   "error",
+            "pct":     0,
+            "label":   "❌ Processing failed",
+            "message": "Processing failed — check server logs.",
+            "success": False,
+        }})
+
+    # Still processing but no snapshot yet (thread just started)
+    return jsonify({"success": True, "progress": {
+        "doc_id": doc_id,
+        "stage":  "parsing",
+        "pct":    5,
+        "label":  "📄 Parsing document…",
+    }})
+
+@app.route("/admin/documents")
+@role_required("admin")
+def get_documents():
+
+    docs = UploadedDocument.query.order_by(
+        UploadedDocument.uploaded_at.desc()
+    ).all()
+
+    data = []
+
+    for d in docs:
+        data.append({
+            "id": d.id,
+            "filename": d.filename,
+            "status": d.status,
+            "chunks_count": d.chunks_count,
+            "file_size": d.file_size,
+            "uploaded_at": d.uploaded_at.strftime("%Y-%m-%d %H:%M"),
+            "uploaded_by": d.uploaded_by
+        })
+
+    return jsonify({
+        "success": True,
+        "documents": data
+    })
+
+@app.route("/admin/delete/<int:doc_id>", methods=["DELETE"])
+@role_required("admin")
+def delete_document(doc_id):
+
+    doc = UploadedDocument.query.get(doc_id)
+
+    if not doc:
+        return jsonify({"success": False, "message": "Document not found"})
+
+    filepath = os.path.join(app.config["UPLOAD_FOLDER"], doc.filename)
+
+    if os.path.exists(filepath):
+        os.remove(filepath)
+
+    db.session.delete(doc)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "message": "Document deleted successfully"
+    })
+    
+@app.route("/admin/requests")
+@role_required("admin")
+def get_admin_requests():
+
+    requests = AdminRequest.query.filter_by(status="pending").all()
+
+    data = []
+
+    for r in requests:
+        user = User.query.get(r.user_id)
+
+        data.append({
+            "id": r.id,
+            "username": user.username,
+            "email": user.email
+        })
+
+    return jsonify(data)
+    
 # -------------------------
 # CHAT
 # -------------------------
@@ -591,6 +1040,7 @@ def logout():
 
 
 if __name__ == '__main__':
-    # with app.app_context():
-    #     db.create_all()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    with app.app_context():
+        # db.drop_all()
+        db.create_all()
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
