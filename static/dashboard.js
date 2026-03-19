@@ -51,6 +51,9 @@ async function loadChat(sessionId) {
   messages.forEach((m) => {
     addMessage(m.content, m.role === "user");
   });
+
+  // ✅ THIS LINE FIXES HIGHLIGHTING
+  loadChatHistory();
 }
 
 async function deleteChat(chatId, event) {
@@ -483,8 +486,10 @@ function openSection(section) {
   event.target.classList.add("active");
 }
 
-function toggleNotifications() {
-  openSection("notifications");
+function toggleNotificationPopup() {
+  const popup = document.getElementById("notificationPopup");
+
+  popup.style.display = popup.style.display === "block" ? "none" : "block";
 }
 
 // ===============================
@@ -523,29 +528,14 @@ async function requestAdminAccess() {
 }
 
 async function loadNotifications() {
-  const response = await fetch("/admin/notifications");
-
+  const response = await fetch("/notifications");
   const data = await response.json();
-
-  const container = document.getElementById("notifications-section");
 
   const count = document.getElementById("notifCount");
 
   if (count) {
     count.innerText = data.length;
   }
-
-  container.innerHTML = "<h2>Notifications</h2>";
-
-  data.forEach((n) => {
-    const div = document.createElement("div");
-
-    div.className = "notification";
-
-    div.innerHTML = `${n.text} <small>${n.time}</small>`;
-
-    container.appendChild(div);
-  });
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -610,18 +600,16 @@ function toggleNotificationPopup() {
 }
 
 async function loadNotificationPopup() {
-  const response = await fetch("/admin/notifications");
-
+  const response = await fetch("/notifications");
   const data = await response.json();
 
   const list = document.getElementById("notificationList");
-
-  const badge = document.getElementById("notifCount");
-
   list.innerHTML = "";
 
-  if (badge) {
-    badge.innerText = data.length;
+  if (data.length === 0) {
+    list.innerHTML =
+      "<p style='text-align:center; opacity:0.6;'>No notifications</p>";
+    return;
   }
 
   data.forEach((n) => {
@@ -629,11 +617,17 @@ async function loadNotificationPopup() {
 
     div.className = "notification-item";
 
+    // 🎨 TYPE BASED STYLE
+    if (n.type === "upload") {
+      div.style.borderLeft = "4px solid #3b82f6";
+    } else if (n.type === "request") {
+      div.style.borderLeft = "4px solid #10b981";
+    }
+
     div.innerHTML = `
-${n.text}
-<br>
-<small>${n.time}</small>
-`;
+      <div>${n.text}</div>
+      <small>${n.time}</small>
+    `;
 
     list.appendChild(div);
   });

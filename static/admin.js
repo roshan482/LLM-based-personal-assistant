@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   loadRequests();
   setupUpload();
   loadDocuments(); // ✅ FIX: Load uploaded documents list on page load
+  loadAnalytics();
 });
 
 // ==============================
@@ -102,7 +103,6 @@ async function loadChat(sessionId) {
   currentSession = sessionId;
 
   const response = await fetch(`/chat/messages/${sessionId}`);
-
   const messages = await response.json();
 
   chatMessages.innerHTML = "";
@@ -110,6 +110,9 @@ async function loadChat(sessionId) {
   messages.forEach((m) => {
     addMessage(m.content, m.role === "user");
   });
+
+  // 🔥 FIX: Refresh sidebar to update active chat
+  loadChatHistory();
 }
 
 async function deleteChat(chatId, event) {
@@ -258,11 +261,39 @@ function insertEmoji() {
 // ==============================
 
 function openSection(section) {
+  // 1. Hide all sections
   document.querySelectorAll(".section").forEach((s) => {
     s.classList.remove("active");
   });
 
-  document.getElementById(section + "-section").classList.add("active");
+  // 2. Show selected section
+  const target = document.getElementById(section + "-section");
+  if (target) {
+    target.classList.add("active");
+  }
+
+  // 3. Remove active from all sidebar items
+  document.querySelectorAll(".menu-item").forEach((item) => {
+    item.classList.remove("active");
+  });
+
+  // 4. Add active to clicked sidebar item
+  document.querySelectorAll(".menu-item").forEach((item) => {
+    const onclickAttr = item.getAttribute("onclick");
+
+    if (onclickAttr && onclickAttr.includes(`'${section}'`)) {
+      item.classList.add("active");
+    }
+  });
+
+  // ✅ LOAD PROFILE DATA ONLY WHEN OPENED
+  if (section === "profile") {
+    loadProfile();
+  }
+
+  if (section === "usage") {
+    loadStats(); // allow DOM to render first
+  }
 }
 
 // ==============================
@@ -291,15 +322,35 @@ async function loadNotifications() {
 
 function toggleNotificationPopup() {
   const popup = document.getElementById("notificationPopup");
+  const count = document.getElementById("notifCount");
 
-  if (popup.style.display === "block") {
+  const isOpen = popup.style.display === "block";
+
+  if (isOpen) {
     popup.style.display = "none";
   } else {
     popup.style.display = "block";
 
+    // Load notifications
     loadNotificationPopup();
+
+    // 🔥 RESET COUNT
+    if (count) {
+      count.innerText = "0";
+    }
   }
 }
+
+document.addEventListener("click", function (e) {
+  const popup = document.getElementById("notificationPopup");
+  const icon = document.querySelector(".notification-icon");
+
+  if (!popup || !icon) return;
+
+  if (!popup.contains(e.target) && !icon.contains(e.target)) {
+    popup.style.display = "none";
+  }
+});
 
 async function loadNotificationPopup() {
   const response = await fetch("/admin/notifications");
@@ -331,24 +382,48 @@ async function loadNotificationPopup() {
 
 async function loadRequests() {
   const response = await fetch("/admin/requests");
-
   const requests = await response.json();
 
   const container = document.getElementById("requestList");
 
   container.innerHTML = "";
 
+  // ✅ NO REQUEST UI
+  if (requests.length === 0) {
+    container.innerHTML = `
+      <div class="no-requests">
+        <i class="fas fa-inbox"></i>
+        <h3>No Pending Requests</h3>
+        <p>All admin access requests will appear here.</p>
+      </div>
+    `;
+    return;
+  }
+
+  // ✅ SHOW REQUESTS
   requests.forEach((r) => {
     const div = document.createElement("div");
 
-    div.className = "notification";
+    div.className = "request-card";
 
     div.innerHTML = `
-      <strong>${r.username}</strong> (${r.email})
-      <br><br>
+      <div class="request-header">
+        <div class="request-avatar">👤</div>
+        <div>
+          <h4>${r.username}</h4>
+          <p>${r.email}</p>
+        </div>
+      </div>
 
-      <button onclick="approveRequest(${r.id})">Approve</button>
-      <button onclick="rejectRequest(${r.id})">Reject</button>
+      <div class="request-actions">
+        <button class="btn-approve" onclick="approveRequest(${r.id})">
+          <i class="fas fa-check"></i> Approve
+        </button>
+
+        <button class="btn-reject" onclick="rejectRequest(${r.id})">
+          <i class="fas fa-times"></i> Reject
+        </button>
+      </div>
     `;
 
     container.appendChild(div);
@@ -599,7 +674,13 @@ async function loadDocuments() {
         <div style="font-size:12px;color:#94a3b8;margin-top:4px">
           ${doc.uploaded_at} &nbsp;|&nbsp;
           ${(doc.file_size / 1024).toFixed(1)} KB &nbsp;|&nbsp;
-          <span style="color:${doc.status === "completed" ? "#22c55e" : "#f59e0b"}">
+          <span style="color:${
+            doc.status === "completed"
+              ? "#22c55e"
+              : doc.status === "failed"
+                ? "#ef4444"
+                : "#f59e0b"
+          }">
             ${doc.status === "completed" ? `✅ ${doc.chunks_count} chunks indexed` : "⏳ " + doc.status}
           </span>
         </div>
@@ -643,4 +724,221 @@ const fileInput = document.getElementById("pdfFile");
 
 if (dropArea) {
   dropArea.addEventListener("click", () => fileInput.click());
+}
+
+async function loadProfile() {
+  try {
+    const response = await fetch("/api/profile");
+    const data = await response.json();
+
+    document.getElementById("profileName").innerText = data.username;
+    document.getElementById("profileEmail").innerText = data.email;
+    document.getElementById("profileRole").innerText = data.role.toUpperCase();
+    document.getElementById("profileDate").innerText = data.created_at;
+  } catch (err) {
+    console.error("Profile load failed", err);
+  }
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch("/api/stats");
+    const data = await res.json();
+
+    // ===== CARDS =====
+    document.getElementById("totalUsers").innerText = data.total_users;
+    document.getElementById("totalAdmins").innerText = data.total_admins;
+    document.getElementById("totalChats").innerText = data.total_chats;
+    document.getElementById("totalMessages").innerText = data.total_messages;
+    document.getElementById("totalDocs").innerText = data.documents;
+
+    // ===== PIE CHART (User vs Admin) =====
+    new Chart(document.getElementById("userChart"), {
+      type: "pie",
+      data: {
+        labels: ["Users", "Admins"],
+        datasets: [
+          {
+            data: [data.total_users - data.total_admins, data.total_admins],
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // 🔥 VERY IMPORTANT
+      },
+    });
+
+    // ===== CHAT TREND =====
+    const chatLabels = data.chat_trend.map((d) => d[0]);
+    const chatValues = data.chat_trend.map((d) => d[1]);
+
+    new Chart(document.getElementById("chatChart"), {
+      type: "line",
+      data: {
+        labels: chatLabels,
+        datasets: [
+          {
+            label: "Chats",
+            data: chatValues,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // 🔥 VERY IMPORTANT
+      },
+    });
+
+    // ===== MESSAGE TREND =====
+    const msgLabels = data.message_trend.map((d) => d[0]);
+    const msgValues = data.message_trend.map((d) => d[1]);
+
+    new Chart(document.getElementById("messageChart"), {
+      type: "bar",
+      data: {
+        labels: msgLabels,
+        datasets: [
+          {
+            label: "Messages",
+            data: msgValues,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false, // 🔥 VERY IMPORTANT
+      },
+    });
+  } catch (err) {
+    console.error("Stats error", err);
+  }
+}
+
+let userChart, chatChart, messageChart;
+
+Chart.defaults.plugins.tooltip.backgroundColor = "#020617";
+Chart.defaults.plugins.tooltip.borderColor = "#3b82f6";
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.plugins.tooltip.padding = 10;
+Chart.defaults.plugins.tooltip.cornerRadius = 6;
+Chart.defaults.plugins.tooltip.titleColor = "#fff";
+Chart.defaults.plugins.tooltip.bodyColor = "#cbd5f5";
+
+Chart.defaults.plugins.legend.labels.color = "#94a3b8";
+
+async function loadAnalytics() {
+  const res = await fetch("/admin/analytics");
+  const data = await res.json();
+
+  // ===== UPDATE CARDS =====
+  document.getElementById("totalUsers").innerText = data.users;
+  document.getElementById("totalAdmins").innerText = data.admins;
+  document.getElementById("totalChats").innerText = data.chats;
+  document.getElementById("totalMessages").innerText = data.messages;
+  document.getElementById("totalDocs").innerText = data.documents;
+
+  // 🔥 DESTROY OLD CHARTS (VERY IMPORTANT)
+  if (userChart) userChart.destroy();
+  if (chatChart) chatChart.destroy();
+  if (messageChart) messageChart.destroy();
+
+  // ===== USER RATIO =====
+  userChart = new Chart(document.getElementById("userChart"), {
+    type: "doughnut",
+    data: {
+      labels: ["Users", "Admins"],
+      datasets: [
+        {
+          data: [data.users - data.admins, data.admins],
+          backgroundColor: ["#3b82f6", "#ef4444"],
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          enabled: true,
+        },
+        legend: {
+          position: "bottom",
+        },
+      },
+    },
+  });
+
+  // ===== CHAT TREND =====
+  chatChart = new Chart(document.getElementById("chatChart"), {
+    type: "line",
+    data: {
+      labels: data.chat_dates,
+      datasets: [
+        {
+          label: "Chats",
+          data: data.chat_counts,
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59,130,246,0.2)",
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "nearest",
+        intersect: false,
+      },
+      plugins: {
+        tooltip: {
+          enabled: true,
+          callbacks: {
+            label: function (context) {
+              return "Chats: " + context.raw;
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // ===== MESSAGE TREND =====
+  messageChart = new Chart(document.getElementById("messageChart"), {
+    type: "bar",
+    data: {
+      labels: data.msg_dates,
+      datasets: [
+        {
+          label: "Messages",
+          data: data.msg_counts,
+          backgroundColor: "#6366f1",
+          borderRadius: 6,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          enabled: true,
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+        },
+      },
+    },
+  });
+
+  setTimeout(() => {
+    window.dispatchEvent(new Event("resize"));
+  }, 200);
 }

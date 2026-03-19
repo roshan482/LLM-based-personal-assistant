@@ -1,5 +1,6 @@
+from datetime import datetime, timedelta
 from src.helper import load_document
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
 import os
 import certifi
 import traceback
@@ -16,9 +17,8 @@ from itsdangerous import URLSafeTimedSerializer
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-
+from sqlalchemy import func
 from authlib.integrations.flask_client import OAuth
-
 # LangChain + RAG
 from src.helper import (
     download_hugging_face_embeddings,
@@ -219,6 +219,10 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+@socketio.on('connect')
+def handle_connect():
+    if 'user_id' in session:
+        join_room(f"user_{session['user_id']}")
 
 def login_required(f):
     from functools import wraps
@@ -541,8 +545,8 @@ def request_admin():
 
     db.session.commit()
     socketio.emit("new_notification", {
-        "text": f"{user.username} requested admin access",
-        "time": datetime.utcnow().strftime("%H:%M")
+    "text": f"{user.username} requested admin access",
+    "time": datetime.utcnow().strftime("%H:%M")
     })
     return jsonify({"message": "Admin request sent"})
 
@@ -559,6 +563,11 @@ def approve_request(req_id):
 
     db.session.commit()
 
+    socketio.emit("new_notification", {
+    "text": "Your admin request has been APPROVED",
+    "time": datetime.utcnow().strftime("%H:%M")
+    }, room=f"user_{user.id}")
+
     return jsonify({"message": "User promoted to admin"})
 
 @app.route("/admin/reject/<int:req_id>", methods=["POST"])
@@ -570,6 +579,11 @@ def reject_request(req_id):
     req.status = "rejected"
 
     db.session.commit()
+
+    socketio.emit("new_notification", {
+    "text": "Your admin request has been REJECTED",
+    "time": datetime.utcnow().strftime("%H:%M")
+    }, room=f"user_{req.user_id}")
 
     return jsonify({"message": "Request rejected"})
 
@@ -674,16 +688,29 @@ def _process_document_background(app_ctx, doc_id: int, filepath: str,
                 })
 
             # Choose concurrency: more threads for large docs
-            workers  = 4 if total_chunks > 200 else 2
+            workers  = 1
             batch_sz = 50 if total_chunks > 200 else 30
 
-            processed = process_chunks_in_batches(
-                chunks,
-                batch_processor=docsearch.add_documents,
-                batch_size=batch_sz,
-                max_workers=workers,
-                progress_callback=_progress_cb,
-            )
+            MAX_RETRIES = 2
+            attempt = 0
+
+            while attempt <= MAX_RETRIES:
+                try:
+                    processed = process_chunks_in_batches(
+                        chunks,
+                        batch_processor=docsearch.add_documents,
+                        batch_size=batch_sz,
+                        max_workers=1,
+                        progress_callback=_progress_cb,
+                    )
+                    break
+
+                except Exception as e:
+                    attempt += 1
+                    print(f"Retry {attempt} due to error:", e)
+
+                    if attempt > MAX_RETRIES:
+                        raise e
 
             # ── 4. Mark completed in DB ────────────────────────────────────
             doc = UploadedDocument.query.get(doc_id)
@@ -700,6 +727,11 @@ def _process_document_background(app_ctx, doc_id: int, filepath: str,
                 "success": True,
             })
 
+            socketio.emit("new_notification", {
+            "text": f"New document uploaded: {filename}",
+            "time": datetime.utcnow().strftime("%H:%M")
+            })
+
         except Exception as exc:
             traceback.print_exc()
 
@@ -707,6 +739,7 @@ def _process_document_background(app_ctx, doc_id: int, filepath: str,
                 doc = UploadedDocument.query.get(doc_id)
                 if doc:
                     doc.status = "failed"
+                    doc.chunks_count = 0
                     db.session.commit()
             except Exception:
                 pass
@@ -1031,6 +1064,155 @@ def delete_chat(session_id):
 
     return jsonify({"success": True})
 
+
+@app.route("/api/profile")
+@login_required
+def api_profile():
+    user = User.query.get(session['user_id'])
+
+    return jsonify({
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "created_at": user.created_at.strftime("%d %b %Y")
+    })
+
+
+
+@app.route("/api/stats")
+@role_required("admin")
+def api_stats():
+
+    total_users = User.query.count()
+    total_admins = User.query.filter_by(role="admin").count()
+    total_chats = ChatSession.query.count()
+    total_messages = ChatMessage.query.count()
+    total_docs = UploadedDocument.query.count()
+
+    # Chat trend (last 7 days)
+    chat_trend = db.session.query(
+    func.date(ChatSession.created_at),
+    func.count(ChatSession.id)
+    ).group_by(func.date(ChatSession.created_at)).order_by(func.date(ChatSession.created_at)).all()
+
+    message_trend = db.session.query(
+    func.date(ChatMessage.created_at),
+    func.count(ChatMessage.id)
+    ).group_by(func.date(ChatMessage.created_at)).order_by(func.date(ChatMessage.created_at)).all()
+
+    return jsonify({
+        "total_users": total_users,
+        "total_admins": total_admins,
+        "total_chats": total_chats,
+        "total_messages": total_messages,
+        "documents": total_docs,
+        "chat_trend": [[str(d), c] for d, c in chat_trend],
+        "message_trend": [[str(d), c] for d, c in message_trend]
+    })
+
+@app.route("/notifications")
+@login_required
+def user_notifications():
+
+    user_id = session['user_id']
+
+    # ✅ ONLY USER REQUEST STATUS
+    requests = AdminRequest.query.filter_by(user_id=user_id).all()
+
+    # ✅ ALL DOCUMENT UPLOADS
+    uploads = UploadedDocument.query.order_by(
+        UploadedDocument.uploaded_at.desc()
+    ).limit(10).all()
+
+    notifications = []
+
+    # USER-SPECIFIC (IMPORTANT)
+    for r in requests:
+        notifications.append({
+            "text": f"Your admin request is {r.status.upper()}",
+            "time": r.created_at.strftime("%H:%M"),
+            "type": "request"
+        })
+
+    # GLOBAL DOCUMENT UPLOAD
+    for u in uploads:
+        notifications.append({
+            "text": f"New document uploaded: {u.filename}",
+            "time": u.uploaded_at.strftime("%H:%M"),
+            "type": "upload"
+        })
+
+    return jsonify(notifications)
+
+@app.route("/admin/analytics")
+@role_required("admin")
+def analytics():
+
+    # ===== COUNTS =====
+    users = User.query.filter_by(role="user").count()
+    admins = User.query.filter_by(role="admin").count()
+    chats = ChatSession.query.count()
+    messages = ChatMessage.query.count()
+    docs = UploadedDocument.query.count()
+
+    # ===== LAST 7 DAYS RANGE =====
+    last_7_days = [
+        (datetime.utcnow() - timedelta(days=i)).date()
+        for i in range(6, -1, -1)
+    ]
+
+    # ===== CHAT DATA (GROUP BY DATE) =====
+    chat_data = (
+        db.session.query(
+            func.date(ChatSession.created_at),
+            func.count(ChatSession.id)
+        )
+        .group_by(func.date(ChatSession.created_at))
+        .all()
+    )
+
+    chat_map = {str(date): count for date, count in chat_data}
+
+    chat_dates = []
+    chat_counts = []
+
+    for day in last_7_days:
+        d = str(day)
+        chat_dates.append(day.strftime("%d %b"))
+        chat_counts.append(chat_map.get(d, 0))
+
+    # ===== MESSAGE DATA (GROUP BY DATE) =====
+    msg_data = (
+        db.session.query(
+            func.date(ChatMessage.created_at),
+            func.count(ChatMessage.id)
+        )
+        .group_by(func.date(ChatMessage.created_at))
+        .all()
+    )
+
+    msg_map = {str(date): count for date, count in msg_data}
+
+    msg_dates = []
+    msg_counts = []
+
+    for day in last_7_days:
+        d = str(day)
+        msg_dates.append(day.strftime("%d %b"))
+        msg_counts.append(msg_map.get(d, 0))
+
+    # ===== RESPONSE =====
+    return jsonify({
+        "users": users,
+        "admins": admins,
+        "chats": chats,
+        "messages": messages,
+        "documents": docs,
+        "chat_dates": chat_dates,
+        "chat_counts": chat_counts,
+        "msg_dates": msg_dates,
+        "msg_counts": msg_counts
+    })
 
 @app.route('/logout')
 def logout():

@@ -317,39 +317,32 @@ def download_hugging_face_embeddings() -> HuggingFaceEmbeddings:
 # ---------------------------------------------------------
 
 def process_chunks_in_batches(
-    chunks: List[Document],
-    batch_processor: Callable[[List[Document]], None],
-    batch_size: int = 50,
-    max_workers: int = 4,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
-) -> int:
+    chunks,
+    batch_processor,
+    batch_size=50,
+    max_workers=1,   # FORCE SINGLE THREAD
+    progress_callback=None,
+):
     """
-    Upserts chunks to the vector store in parallel batches.
-    Pinecone calls are I/O-bound so concurrent threads give real throughput.
-    Returns total number of chunks successfully processed.
+    SAFE VERSION (NO MULTITHREADING)
+    HuggingFace embeddings are NOT thread-safe.
     """
+
     if not chunks:
         return 0
 
-    total        = len(chunks)
-    batches      = [chunks[i: i + batch_size] for i in range(0, total, batch_size)]
-    counter_lock = threading.Lock()
-    done_count   = {"n": 0}
+    total = len(chunks)
+    done = 0
 
-    def _upload_batch(batch: List[Document]) -> int:
+    for i in range(0, total, batch_size):
+        batch = chunks[i:i + batch_size]
+
+        # Process sequentially (NO THREADS)
         batch_processor(batch)
-        return len(batch)
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_upload_batch, b): b for b in batches}
+        done += len(batch)
 
-        for future in as_completed(futures):
-            n = future.result()
-            with counter_lock:
-                done_count["n"] += n
-                done = done_count["n"]
+        if progress_callback:
+            progress_callback(done, total)
 
-            if progress_callback:
-                progress_callback(done, total)
-
-    return done_count["n"]
+    return done

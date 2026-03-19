@@ -467,6 +467,103 @@
         }
       }
 
+      /* 🔔 Notification Icon */
+      .notification-wrapper {
+        position: relative;
+        margin-left: 20px;
+      }
+
+      .notification-icon {
+        position: relative;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 10px;
+        transition: 0.2s;
+      }
+
+      .notification-icon:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .notif-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: #ef4444;
+        color: white;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 50%;
+      }
+
+      /* 📦 Popup */
+      .notification-popup {
+        position: absolute;
+        top: 60px;
+        right: 20px;
+        width: 340px;
+        max-height: 400px;
+        overflow-y: auto;
+
+        background: rgba(30, 41, 59, 0.95);
+        backdrop-filter: blur(20px);
+
+        border-radius: 14px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+
+        display: none;
+        z-index: 999;
+        animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Header */
+      .notif-header {
+        display: flex;
+        justify-content: space-between;
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        font-weight: 600;
+      }
+
+      /* List */
+      .notif-list {
+        padding: 10px;
+      }
+
+      /* Item */
+      .notification-item {
+        padding: 12px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        background: rgba(255, 255, 255, 0.05);
+        transition: 0.2s;
+        cursor: pointer;
+      }
+
+      .notification-item:hover {
+        background: rgba(59, 130, 246, 0.2);
+        transform: translateY(-2px);
+      }
+
+      /* Time */
+      .notification-item small {
+        opacity: 0.6;
+        font-size: 12px;
+      }
+
       .message.user {
         margin-left: auto;
         flex-direction: row-reverse;
@@ -632,6 +729,12 @@
             </div>
             <span class="username-text">{{ user.username }}</span>
           </div>
+          <div class="notification-wrapper">
+            <div class="notification-icon" onclick="toggleNotificationPopup()">
+              🔔
+              <span id="notifCount" class="notif-badge">0</span>
+            </div>
+          </div>
           <button class="logout-btn" onclick="handleLogout()">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -733,6 +836,16 @@
         <button onclick="closeProfileModal()">Close</button>
       </div>
     </div>
+
+    <div id="notificationPopup" class="notification-popup">
+      <div class="notif-header">
+        <h3>Notifications</h3>
+        <span onclick="toggleNotificationPopup()">✖</span>
+      </div>
+
+      <div id="notificationList" class="notif-list"></div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
