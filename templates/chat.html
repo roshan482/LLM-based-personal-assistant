@@ -89,6 +89,30 @@
         color: #f8fafc;
       }
 
+
+      /* NORMAL STATE (Gray - No auto glow) */
+#speakToggle {
+  transition: all 0.2s ease;
+  background: #f3f4f6 !important;
+  color: #6b7280 !important;
+}
+
+/* GREEN - Speaking/Resume */
+#speakToggle.speaking {
+  background: #10b981 !important;
+  color: white !important;
+}
+
+/* YELLOW - Paused */
+#speakToggle.paused {
+  background: #f59e0b !important;
+  color: white !important;
+}
+
+
+
+
+
       .new-chat-btn {
         padding: 8px 16px;
         background: rgba(59, 130, 246, 0.2);
@@ -365,6 +389,52 @@
         transform: translateY(-1px);
       }
 
+
+.control-btn {
+  background: rgba(59, 130, 246, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #93c5fd;
+  transition: 0.2s;
+}
+
+.control-btn:hover {
+  background: rgba(59, 130, 246, 0.4);
+  transform: scale(1.1);
+}
+
+.hidden {
+  display: none;
+}
+
+/* 🎤 Wave Animation */
+.voice-wave {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.voice-bar {
+  width: 4px;
+  height: 10px;
+  background: #3b82f6;
+  animation: wave 1s infinite ease-in-out;
+}
+
+.voice-bar:nth-child(2) { animation-delay: 0.1s; }
+.voice-bar:nth-child(3) { animation-delay: 0.2s; }
+.voice-bar:nth-child(4) { animation-delay: 0.3s; }
+.voice-bar:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes wave {
+  0%, 100% { height: 10px; }
+  50% { height: 25px; }
+}
+
       .chat-input {
         padding: 24px;
         background: rgba(15, 23, 42, 0.8);
@@ -428,25 +498,7 @@
         transform: scale(1.05);
       }
 
-      #sendButton {
-        width: 52px;
-        height: 52px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-        border: none;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-        color: white;
-      }
-
-      #sendButton:hover:not(:disabled) {
-        transform: translateY(-2px) scale(1.05);
-        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
-      }
+  
 
       /* Message Styles */
       .message {
@@ -791,29 +843,29 @@
             </div>
           </div>
 
-          <div class="chat-input">
-            <div class="input-wrapper">
-              <input
-                type="text"
-                id="messageInput"
-                placeholder="Type your message here..."
-                autocomplete="off"
-              />
-              <button class="emoji-btn" onclick="insertEmoji()">😊</button>
-            </div>
-            <button id="sendButton">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22,11 13,22 2,11"></polygon>
-              </svg>
-            </button>
+        <div class="chat-input">
+  <div class="input-wrapper">
+    <input
+      type="text"
+      id="messageInput"
+      placeholder="Type your message here..."
+      autocomplete="off"
+    />
+
+    <!-- 🎤 MIC BUTTON -->
+    <button id="micBtn" class="control-btn">🎤</button>
+
+    <!-- ✅ CONFIRM BUTTON (hidden initially) -->
+    <button id="confirmBtn" class="control-btn hidden">✔</button>
+
+    <!-- ❌ CANCEL BUTTON (hidden initially) -->
+    <button id="cancelBtn" class="control-btn hidden">✖</button>
+
+    <!-- 🔊 SPEAK BUTTON -->
+    <button id="speakToggle" class="control-btn">🔊</button>
+  </div>
+</div>
+
           </div>
         </div>
       </div>
