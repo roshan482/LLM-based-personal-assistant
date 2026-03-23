@@ -980,7 +980,70 @@ if (typeof io !== "undefined") {
     if (hc) hc.textContent = parseInt(hc.textContent || 0) + 1;
   });
 }
+// ================= PROFILE EDIT =================
 
+function openEditProfileModal() {
+  document.getElementById("editProfileModal").classList.add("open");
+}
+
+function closeEditProfileModal() {
+  document.getElementById("editProfileModal").classList.remove("open");
+}
+
+async function saveProfileChanges() {
+  const username = document.getElementById("editUsername").value.trim();
+  const oldPass = document.getElementById("oldPassword").value;
+  const newPass = document.getElementById("newPassword").value;
+  const confirmPass = document.getElementById("confirmPassword").value;
+  const status = document.getElementById("editStatus");
+
+  if (!oldPass) {
+    status.innerText = "Old password required";
+    return;
+  }
+
+  if (newPass && newPass !== confirmPass) {
+    status.innerText = "Passwords do not match";
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append("username", username);
+    formData.append("current_password", oldPass);
+    formData.append("new_password", newPass);
+
+    const response = await fetch("/profile/update", {
+      method: "POST",
+      body: formData,
+      credentials: "include", // 🔥 VERY IMPORTANT
+    });
+
+    let data;
+
+    try {
+      data = await response.json();
+    } catch (e) {
+      console.error("Not JSON response:", await response.text());
+      status.innerText = "Server error";
+      return;
+    }
+
+    console.log("RESPONSE:", data); // 🔥 ADD THIS
+
+    status.innerText = data.message;
+
+    if (data.success) {
+      setTimeout(() => {
+        closeEditProfileModal();
+        location.reload();
+      }, 1000);
+    }
+  } catch (error) {
+    console.error(error);
+    status.innerText = "Update failed";
+  }
+}
 // ==============================================
 // GLOBAL EXPORTS
 // ==============================================
@@ -993,3 +1056,4 @@ window.closeProfileModal = closeProfileModal;
 window.requestAdminAccess = requestAdminAccess;
 window.toggleNotificationPopup = toggleNotificationPopup;
 window.loadNotificationPopup = loadNotificationPopup;
+window.saveProfileChanges = saveProfileChanges;

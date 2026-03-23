@@ -1,0 +1,791 @@
+<!-- ============================================================
+  DROP-IN REPLACEMENT for the adminRequestModal + its <script> block
+  in chat.html.
+
+  WHAT CHANGED
+  ────────────
+  1. Multi-step modal  (Step 1 → upload ID  |  Step 2 → confirm & send)
+  2. Drag-and-drop file drop zone with live preview
+  3. Upload progress animation while request is being sent
+  4. Full CSS lives inside <style> — no external deps needed
+  5. Uses /user/request_admin  (multipart/form-data POST)
+  ============================================================ -->
+
+<!-- ── STYLES (inject into <head> or keep here) ─────────────────── -->
+<style>
+  /* ── Admin Request Modal Overrides ── */
+  #adminRequestModal .modal-box {
+    width: 420px;
+    max-width: 95vw;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 20px;
+  }
+
+  /* Header */
+  .ar-header {
+    background: linear-gradient(135deg, #0f172a, #1e3a5f);
+    padding: 22px 24px 18px;
+    position: relative;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .ar-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .ar-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+  }
+  .ar-close {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    width: 30px;
+    height: 30px;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+  }
+  .ar-close:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+  }
+
+  .ar-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #f1f5f9;
+  }
+  .ar-sub {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  /* Step indicators */
+  .ar-steps {
+    display: flex;
+    gap: 0;
+    align-items: center;
+  }
+  .ar-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #475569;
+    padding: 5px 0;
+    flex: 1;
+  }
+  .ar-step.active {
+    color: #60a5fa;
+  }
+  .ar-step.done {
+    color: #22c55e;
+  }
+  .ar-step-num {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    background: #0f172a;
+    flex-shrink: 0;
+    transition: 0.25s;
+  }
+  .ar-step.active .ar-step-num {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+  .ar-step.done .ar-step-num {
+    border-color: #22c55e;
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+  }
+  .ar-step-line {
+    flex: 1;
+    height: 1px;
+    background: #1e293b;
+    margin: 0 6px;
+  }
+
+  /* Body */
+  .ar-body {
+    padding: 22px 24px 20px;
+  }
+
+  /* DROP ZONE */
+  .ar-dropzone {
+    border: 2px dashed rgba(59, 130, 246, 0.35);
+    border-radius: 14px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    background: rgba(59, 130, 246, 0.04);
+    position: relative;
+    overflow: hidden;
+  }
+  .ar-dropzone:hover,
+  .ar-dropzone.drag-over {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.09);
+    transform: translateY(-1px);
+  }
+  .ar-dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 2;
+  }
+  .ar-dz-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+    display: block;
+  }
+  .ar-dz-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e2e8f0;
+    margin-bottom: 4px;
+  }
+  .ar-dz-hint {
+    font-size: 11px;
+    color: #64748b;
+  }
+  .ar-dz-formats {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 12px;
+  }
+  .ar-dz-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+  }
+
+  /* Preview */
+  .ar-preview {
+    display: none;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 12px;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    position: relative;
+  }
+  .ar-preview img {
+    width: 100%;
+    max-height: 160px;
+    object-fit: cover;
+    display: block;
+  }
+  .ar-preview-pdf {
+    padding: 14px 16px;
+    background: rgba(59, 130, 246, 0.06);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ar-preview-pdf-icon {
+    font-size: 28px;
+  }
+  .ar-preview-pdf-name {
+    font-size: 12px;
+    color: #94a3b8;
+    word-break: break-all;
+  }
+  .ar-preview-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    color: #f1f5f9;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+    z-index: 3;
+  }
+  .ar-preview-remove:hover {
+    background: rgba(239, 68, 68, 0.4);
+  }
+
+  /* Reason textarea */
+  .ar-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .ar-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #e2e8f0;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 72px;
+    max-height: 140px;
+    transition: 0.2s;
+    outline: none;
+  }
+  .ar-textarea:focus {
+    border-color: rgba(59, 130, 246, 0.45);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    background: rgba(59, 130, 246, 0.04);
+  }
+  .ar-textarea::placeholder {
+    color: #475569;
+  }
+
+  /* Confirm step */
+  .ar-confirm-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .ar-confirm-row-icon {
+    font-size: 20px;
+  }
+  .ar-confirm-row-label {
+    font-size: 11px;
+    color: #64748b;
+  }
+  .ar-confirm-row-value {
+    font-size: 13px;
+    color: #e2e8f0;
+    font-weight: 500;
+  }
+
+  /* Progress */
+  .ar-sending {
+    display: none;
+    text-align: center;
+    padding: 24px 0 10px;
+  }
+  .ar-spin {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 3px solid rgba(59, 130, 246, 0.2);
+    border-top-color: #3b82f6;
+    animation: arSpin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes arSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .ar-sending-text {
+    font-size: 13px;
+    color: #64748b;
+  }
+
+  /* Success */
+  .ar-success {
+    display: none;
+    text-align: center;
+    padding: 20px 0 8px;
+  }
+  .ar-success-icon {
+    font-size: 40px;
+    margin-bottom: 10px;
+  }
+  .ar-success-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #22c55e;
+    margin-bottom: 4px;
+  }
+  .ar-success-sub {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  /* Footer */
+  .ar-footer {
+    padding: 0 24px 22px;
+    display: flex;
+    gap: 10px;
+  }
+  .ar-btn {
+    flex: 1;
+    padding: 11px;
+    border-radius: 10px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .ar-btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff;
+  }
+  .ar-btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  }
+  .ar-btn-primary:disabled {
+    opacity: 0.4;
+    cursor: default;
+    transform: none;
+  }
+  .ar-btn-ghost {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+  }
+  .ar-btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: #e2e8f0;
+  }
+
+  /* Status message */
+  #arStatus {
+    font-size: 11px;
+    color: #ef4444;
+    text-align: center;
+    min-height: 16px;
+    margin-bottom: 10px;
+    padding: 0 24px;
+  }
+</style>
+
+<!-- ── MODAL ─────────────────────────────────────────────────────── -->
+<div
+  id="adminRequestModal"
+  class="modal-overlay"
+  onclick="if (event.target === this) closeAdminRequestModal();"
+>
+  <div class="modal-box">
+    <!-- Header -->
+    <div class="ar-header">
+      <div class="ar-header-top">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <div class="ar-icon">🛡️</div>
+          <div>
+            <div class="ar-title">Request Admin Access</div>
+            <div class="ar-sub">
+              Verification required · Usually reviewed within 24h
+            </div>
+          </div>
+        </div>
+        <button class="ar-close" onclick="closeAdminRequestModal()">✕</button>
+      </div>
+
+      <!-- Steps -->
+      <div class="ar-steps" id="arSteps">
+        <div class="ar-step active" id="arStep1">
+          <div class="ar-step-num">1</div>
+          Upload ID
+        </div>
+        <div class="ar-step-line"></div>
+        <div class="ar-step" id="arStep2">
+          <div class="ar-step-num">2</div>
+          Review & Send
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 1: Upload ─────────────────────────────────────────── -->
+    <div class="ar-body" id="arPane1">
+      <!-- Drop zone -->
+      <div class="ar-dropzone" id="arDropzone">
+        <input type="file" id="arIdFile" accept="image/*,application/pdf" />
+        <span class="ar-dz-icon">🪪</span>
+        <div class="ar-dz-title">Upload College / Government ID</div>
+        <div class="ar-dz-hint">Drag & drop here or click to browse</div>
+        <div class="ar-dz-formats">
+          <span class="ar-dz-tag">JPG</span>
+          <span class="ar-dz-tag">PNG</span>
+          <span class="ar-dz-tag">PDF</span>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="ar-preview" id="arPreview">
+        <button
+          class="ar-preview-remove"
+          onclick="clearArFile()"
+          title="Remove"
+        >
+          ✕
+        </button>
+        <img id="arPreviewImg" src="" alt="ID preview" style="display: none" />
+        <div id="arPreviewPdf" class="ar-preview-pdf" style="display: none">
+          <span class="ar-preview-pdf-icon">📄</span>
+          <div>
+            <div
+              style="font-size: 13px; font-weight: 600; color: #e2e8f0"
+              id="arPdfName"
+            ></div>
+            <div class="ar-preview-pdf-name">PDF document selected</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reason -->
+      <div style="margin-top: 16px">
+        <label class="ar-label" for="arReason">Reason / Notes (optional)</label>
+        <textarea
+          id="arReason"
+          class="ar-textarea"
+          placeholder="Briefly explain why you need admin access…"
+        ></textarea>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: Confirm ────────────────────────────────────────── -->
+    <div class="ar-body" id="arPane2" style="display: none">
+      <div class="ar-confirm-row">
+        <span class="ar-confirm-row-icon">🪪</span>
+        <div>
+          <div class="ar-confirm-row-label">ID Card attached</div>
+          <div class="ar-confirm-row-value" id="arConfirmFile">—</div>
+        </div>
+      </div>
+      <div class="ar-confirm-row" id="arConfirmReasonRow" style="display: none">
+        <span class="ar-confirm-row-icon">📝</span>
+        <div>
+          <div class="ar-confirm-row-label">Your note</div>
+          <div
+            class="ar-confirm-row-value"
+            id="arConfirmReason"
+            style="font-size: 12px; color: #94a3b8"
+          ></div>
+        </div>
+      </div>
+
+      <div
+        style="
+          margin-top: 14px;
+          padding: 12px 14px;
+          border-radius: 10px;
+          background: rgba(245, 158, 11, 0.07);
+          border: 1px solid rgba(245, 158, 11, 0.2);
+        "
+      >
+        <div
+          style="
+            font-size: 12px;
+            color: #f59e0b;
+            font-weight: 600;
+            margin-bottom: 3px;
+          "
+        >
+          ⚠️ Before you submit
+        </div>
+        <div style="font-size: 11px; color: #64748b; line-height: 1.6">
+          Your ID card will only be viewed by admins for verification. It will
+          not be shared or stored longer than necessary.
+        </div>
+      </div>
+
+      <!-- Sending animation -->
+      <div class="ar-sending" id="arSending">
+        <div class="ar-spin"></div>
+        <div class="ar-sending-text">Sending your request…</div>
+      </div>
+
+      <!-- Success -->
+      <div class="ar-success" id="arSuccessPane">
+        <div class="ar-success-icon">✅</div>
+        <div class="ar-success-title">Request Submitted!</div>
+        <div class="ar-success-sub">
+          Admin will review your ID and respond soon.
+        </div>
+      </div>
+    </div>
+
+    <!-- Status line -->
+    <div id="arStatus"></div>
+
+    <!-- Footer -->
+    <div class="ar-footer" id="arFooter">
+      <button
+        class="ar-btn ar-btn-ghost"
+        id="arBackBtn"
+        onclick="arGoBack()"
+        style="display: none"
+      >
+        ← Back
+      </button>
+      <button
+        class="ar-btn ar-btn-ghost"
+        id="arCancelBtn"
+        onclick="closeAdminRequestModal()"
+      >
+        Cancel
+      </button>
+      <button class="ar-btn ar-btn-primary" id="arNextBtn" onclick="arNext()">
+        Continue →
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── JS for the new Admin Request Modal ────────────────────────── -->
+<script>
+  (function () {
+    let _arStep = 1;
+
+    /* ── Open / Close ── */
+    window.openAdminRequestModal = function () {
+      _arReset();
+      document.getElementById("adminRequestModal").classList.add("open");
+    };
+    window.closeAdminRequestModal = function () {
+      document.getElementById("adminRequestModal").classList.remove("open");
+    };
+
+    /* ── Drag & Drop wiring ── */
+    const dropzone = document.getElementById("arDropzone");
+    const fileInput = document.getElementById("arIdFile");
+
+    if (dropzone) {
+      dropzone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropzone.classList.add("drag-over");
+      });
+      dropzone.addEventListener("dragleave", () =>
+        dropzone.classList.remove("drag-over"),
+      );
+      dropzone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("drag-over");
+        const dt = e.dataTransfer;
+        if (dt && dt.files.length) _handleFile(dt.files[0]);
+      });
+    }
+    if (fileInput) {
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files.length) _handleFile(fileInput.files[0]);
+      });
+    }
+
+    function _handleFile(file) {
+      const allowed = [
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
+        "application/pdf",
+      ];
+      if (!allowed.includes(file.type)) {
+        _setStatus("Only JPG, PNG, or PDF files are allowed.");
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        _setStatus("File must be under 10 MB.");
+        return;
+      }
+      _setStatus("");
+
+      // Attach to native input via DataTransfer so FormData picks it up
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+      } catch (e) {
+        // Safari fallback — native input will still work from its own event
+      }
+
+      const preview = document.getElementById("arPreview");
+      const previewImg = document.getElementById("arPreviewImg");
+      const previewPdf = document.getElementById("arPreviewPdf");
+      const pdfName = document.getElementById("arPdfName");
+
+      preview.style.display = "block";
+      dropzone.style.display = "none";
+
+      if (file.type === "application/pdf") {
+        previewImg.style.display = "none";
+        previewPdf.style.display = "flex";
+        pdfName.textContent = file.name;
+      } else {
+        previewPdf.style.display = "none";
+        previewImg.style.display = "block";
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          previewImg.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    window.clearArFile = function () {
+      fileInput.value = "";
+      document.getElementById("arPreview").style.display = "none";
+      document.getElementById("arDropzone").style.display = "block";
+      document.getElementById("arPreviewImg").src = "";
+      _setStatus("");
+    };
+
+    /* ── Step navigation ── */
+    window.arNext = async function () {
+      if (_arStep === 1) {
+        // Validate
+        if (!fileInput.files || !fileInput.files.length) {
+          _setStatus("Please upload your ID card to continue.");
+          return;
+        }
+        _setStatus("");
+        // Populate confirm pane
+        document.getElementById("arConfirmFile").textContent =
+          fileInput.files[0].name;
+        const reason = document.getElementById("arReason").value.trim();
+        const reasonRow = document.getElementById("arConfirmReasonRow");
+        if (reason) {
+          reasonRow.style.display = "flex";
+          document.getElementById("arConfirmReason").textContent = reason;
+        } else {
+          reasonRow.style.display = "none";
+        }
+        _goToStep(2);
+      } else if (_arStep === 2) {
+        await _submitRequest();
+      }
+    };
+
+    window.arGoBack = function () {
+      if (_arStep === 2) _goToStep(1);
+    };
+
+    function _goToStep(n) {
+      _arStep = n;
+      document.getElementById("arPane1").style.display =
+        n === 1 ? "block" : "none";
+      document.getElementById("arPane2").style.display =
+        n === 2 ? "block" : "none";
+
+      // Step indicators
+      const s1 = document.getElementById("arStep1");
+      const s2 = document.getElementById("arStep2");
+      if (n === 1) {
+        s1.className = "ar-step active";
+        s2.className = "ar-step";
+      } else {
+        s1.className = "ar-step done";
+        s2.className = "ar-step active";
+      }
+
+      // Footer buttons
+      document.getElementById("arBackBtn").style.display =
+        n === 2 ? "flex" : "none";
+      document.getElementById("arCancelBtn").style.display = "flex";
+      document.getElementById("arNextBtn").textContent =
+        n === 1 ? "Continue →" : "Submit Request";
+      _setStatus("");
+    }
+
+    /* ── Submit ── */
+    async function _submitRequest() {
+      document.getElementById("arSending").style.display = "block";
+      document.getElementById("arNextBtn").disabled = true;
+      document.getElementById("arBackBtn").disabled = true;
+      document.getElementById("arCancelBtn").disabled = true;
+      _setStatus("");
+
+      const formData = new FormData();
+      formData.append("id_card", fileInput.files[0]);
+      const reason = document.getElementById("arReason").value.trim();
+      if (reason) formData.append("reason", reason);
+
+      try {
+        const res = await fetch("/admin/request", {
+          method: "POST",
+          body: formData,
+          credentials: "same-origin",
+        });
+        const data = await res.json();
+
+        document.getElementById("arSending").style.display = "none";
+
+        if (data.success) {
+          document.getElementById("arSuccessPane").style.display = "block";
+          document.getElementById("arFooter").innerHTML =
+            `<button class="ar-btn ar-btn-ghost" style="flex:1" onclick="closeAdminRequestModal()">Close</button>`;
+          // Update the inline status in the profile modal if open
+          const rs = document.getElementById("requestStatus");
+          if (rs) rs.innerText = "Request submitted — pending review";
+        } else {
+          _setStatus(data.message || "Something went wrong. Try again.");
+          document.getElementById("arNextBtn").disabled = false;
+          document.getElementById("arBackBtn").disabled = false;
+          document.getElementById("arCancelBtn").disabled = false;
+        }
+      } catch (err) {
+        document.getElementById("arSending").style.display = "none";
+        _setStatus("Connection error. Check your internet and try again.");
+        document.getElementById("arNextBtn").disabled = false;
+        document.getElementById("arBackBtn").disabled = false;
+        document.getElementById("arCancelBtn").disabled = false;
+      }
+    }
+
+    function _setStatus(msg) {
+      const el = document.getElementById("arStatus");
+      if (el) el.textContent = msg;
+    }
+
+    function _arReset() {
+      _goToStep(1);
+      clearArFile();
+      document.getElementById("arReason").value = "";
+      document.getElementById("arSending").style.display = "none";
+      document.getElementById("arSuccessPane").style.display = "none";
+      // Restore footer
+      document.getElementById("arFooter").innerHTML = `
+      <button class="ar-btn ar-btn-ghost" id="arBackBtn" onclick="arGoBack()" style="display:none">← Back</button>
+      <button class="ar-btn ar-btn-ghost" id="arCancelBtn" onclick="closeAdminRequestModal()">Cancel</button>
+      <button class="ar-btn ar-btn-primary" id="arNextBtn" onclick="arNext()">Continue →</button>`;
+    }
+  })();
+</script>

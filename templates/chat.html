@@ -1443,6 +1443,7 @@
     </div>
 
     <!-- Profile Modal -->
+    <!-- Profile Modal -->
     <div
       id="profileModal"
       class="modal-overlay"
@@ -1450,15 +1451,45 @@
     >
       <div class="modal-box">
         <div class="modal-avatar">{{ user.username[:1].upper() }}</div>
-        <div class="modal-title">Your Account</div>
+
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+          "
+        >
+          <div class="modal-title" style="margin: 0">Your Account</div>
+          <!-- ✏️ EDIT BUTTON -->
+          <button
+            onclick="openEditProfileModal()"
+            style="
+              background: var(--bg-3);
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              padding: 6px 8px;
+              cursor: pointer;
+              color: var(--text-2);
+              transition: 0.2s;
+            "
+            onmouseover="this.style.background = 'var(--bg-4)'"
+            onmouseout="this.style.background = 'var(--bg-3)'"
+          >
+            ✏️
+          </button>
+        </div>
+
         <div class="modal-row">
           <span class="modal-row-label">Username</span>
           <span class="modal-row-value">{{ user.username }}</span>
         </div>
+
         <div class="modal-row">
           <span class="modal-row-label">Email</span>
           <span class="modal-row-value">{{ user.email }}</span>
         </div>
+
         <div class="modal-row">
           <span class="modal-row-label">Role</span>
           <span
@@ -1467,17 +1498,223 @@
             >{{ user.role }}</span
           >
         </div>
+
         <div class="modal-actions">
+          {% if user.role != "admin" %}
           <button
             class="modal-btn primary"
-            onclick="requestAdminAccess()"
+            onclick="openAdminRequestModal()"
             id="adminRequestBtn"
           >
             Request Admin Access
           </button>
           <p id="requestStatus"></p>
+          {% else %}
+          <div class="modal-row">
+            <span class="modal-row-label">Status</span>
+            <span
+              class="modal-row-value"
+              style="color: var(--accent); text-transform: capitalize"
+              >Admin</span
+            >
+          </div>
+          <div style="text-align: center; padding: 16px 0">
+            👑 You are an admin
+          </div>
+          {% endif %}
+
           <button class="modal-btn ghost" onclick="closeProfileModal()">
             Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div
+      id="editProfileModal"
+      class="modal-overlay"
+      onclick="if (event.target === this) closeEditProfileModal();"
+    >
+      <div class="modal-box" style="width: 360px">
+        <div class="modal-title">Edit Profile</div>
+
+        <!-- Username -->
+        <input
+          id="editUsername"
+          type="text"
+          placeholder="New Username"
+          style="
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-3);
+            color: var(--text);
+          "
+        />
+
+        <!-- Old Password -->
+        <input
+          id="oldPassword"
+          type="password"
+          placeholder="Old Password"
+          style="
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-3);
+            color: var(--text);
+          "
+        />
+
+        <!-- New Password -->
+        <input
+          id="newPassword"
+          type="password"
+          placeholder="New Password"
+          style="
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-3);
+            color: var(--text);
+          "
+        />
+
+        <!-- Confirm Password -->
+        <input
+          id="confirmPassword"
+          type="password"
+          placeholder="Confirm Password"
+          style="
+            width: 100%;
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-3);
+            color: var(--text);
+          "
+        />
+
+        <p
+          id="editStatus"
+          style="font-size: 12px; color: var(--accent); text-align: center"
+        ></p>
+
+        <div class="modal-actions">
+          <button class="modal-btn primary" onclick="saveProfileChanges()">
+            Save Changes
+          </button>
+
+          <button class="modal-btn ghost" onclick="closeEditProfileModal()">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Request Admin Access Form Modal -->
+    <div
+      id="adminRequestModal"
+      class="modal-overlay"
+      onclick="if (event.target === this) closeAdminRequestModal();"
+    >
+      <div class="modal-box" style="width: 380px">
+        <div class="modal-title">🛡️ Request Admin Access</div>
+
+        <!-- Upload ID Card -->
+        <div style="margin-bottom: 14px">
+          <label
+            style="
+              font-size: 12px;
+              color: var(--text-2);
+              display: block;
+              margin-bottom: 6px;
+              font-weight: 600;
+            "
+          >
+            📋 College / Government ID Card
+          </label>
+          <input
+            type="file"
+            id="idCardFile"
+            accept="image/*,application/pdf"
+            style="
+              width: 100%;
+              padding: 8px 10px;
+              border-radius: 8px;
+              border: 1px solid var(--border-mid);
+              background: var(--bg-3);
+              color: var(--text);
+              font-size: 13px;
+              box-sizing: border-box;
+            "
+          />
+          <div style="font-size: 11px; color: var(--text-3); margin-top: 4px">
+            JPG, PNG or PDF · Max 10 MB
+          </div>
+        </div>
+
+        <!-- Reason -->
+        <div style="margin-bottom: 14px">
+          <label
+            style="
+              font-size: 12px;
+              color: var(--text-2);
+              display: block;
+              margin-bottom: 6px;
+              font-weight: 600;
+            "
+          >
+            📝 Reason / Notes
+            <span style="color: var(--text-3); font-weight: 400"
+              >(optional)</span
+            >
+          </label>
+          <textarea
+            id="adminRequestReason"
+            rows="3"
+            placeholder="Briefly explain why you need admin access…"
+            style="
+              width: 100%;
+              padding: 9px 11px;
+              border-radius: 8px;
+              border: 1px solid var(--border-mid);
+              background: var(--bg-3);
+              color: var(--text);
+              resize: vertical;
+              font-size: 13px;
+              font-family: var(--font);
+              box-sizing: border-box;
+              outline: none;
+            "
+          ></textarea>
+        </div>
+
+        <p
+          id="adminRequestStatus"
+          style="
+            font-size: 12px;
+            color: var(--accent);
+            text-align: center;
+            margin: 8px 0;
+            min-height: 18px;
+          "
+        ></p>
+
+        <div class="modal-actions">
+          <button class="modal-btn primary" onclick="submitAdminRequest()">
+            Send Request
+          </button>
+          <button class="modal-btn ghost" onclick="closeAdminRequestModal()">
+            Cancel
           </button>
         </div>
       </div>
@@ -1512,7 +1749,84 @@
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+    // Open admin request form
+    <script>
+      // Open / close admin request modal
+      function openAdminRequestModal() {
+        document.getElementById("adminRequestModal").classList.add("open");
+        document.getElementById("adminRequestStatus").innerText = "";
+        document.getElementById("idCardFile").value = "";
+        document.getElementById("adminRequestReason").value = "";
+      }
 
+      function closeAdminRequestModal() {
+        document.getElementById("adminRequestModal").classList.remove("open");
+      }
+
+      // Submit admin request with file + reason
+      async function submitAdminRequest() {
+        const fileInput = document.getElementById("idCardFile");
+        const reasonBox = document.getElementById("adminRequestReason");
+        const status = document.getElementById("adminRequestStatus");
+        const submitBtn = document.querySelector(
+          "#adminRequestModal .modal-btn.primary",
+        );
+
+        if (!fileInput.files || fileInput.files.length === 0) {
+          status.style.color = "#ef4444";
+          status.innerText = "⚠️ Please upload your ID card first.";
+          return;
+        }
+
+        // Client-side size check (10 MB)
+        if (fileInput.files[0].size > 10 * 1024 * 1024) {
+          status.style.color = "#ef4444";
+          status.innerText = "⚠️ File must be under 10 MB.";
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("id_card", fileInput.files[0]);
+        if (reasonBox && reasonBox.value.trim()) {
+          formData.append("reason", reasonBox.value.trim());
+        }
+
+        status.style.color = "var(--accent)";
+        status.innerText = "⏳ Sending request…";
+        if (submitBtn) submitBtn.disabled = true;
+
+        try {
+          const response = await fetch("/admin/request", {
+            method: "POST",
+            body: formData,
+            credentials: "same-origin",
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            status.style.color = "#22c55e";
+            status.innerText =
+              "✅ " + (data.message || "Request sent successfully!");
+            // Update the profile modal status line
+            const profileStatus = document.getElementById("requestStatus");
+            if (profileStatus)
+              profileStatus.innerText = "⏳ Admin request pending review";
+            setTimeout(() => closeAdminRequestModal(), 1800);
+          } else {
+            status.style.color = "#ef4444";
+            status.innerText =
+              "❌ " + (data.message || "Request failed. Try again.");
+            if (submitBtn) submitBtn.disabled = false;
+          }
+        } catch (error) {
+          console.error("Admin request error:", error);
+          status.style.color = "#ef4444";
+          status.innerText = "❌ Connection error. Please try again.";
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      }
+    </script>
     <script>
       // ── Auto-resize textarea ──
       const ta = document.getElementById("messageInput");

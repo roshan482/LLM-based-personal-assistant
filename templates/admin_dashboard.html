@@ -2,100 +2,593 @@
 <html>
   <head>
     <title>Admin Dashboard</title>
-
     <link rel="stylesheet" href="/static/admin.css" />
-    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  </head>
+    <style>
+      /* ══════════════════════════════════════════════
+         VERIFICATION MODAL  — Request Review UI
+      ══════════════════════════════════════════════ */
+      .verify-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.72);
+        backdrop-filter: blur(8px);
+        z-index: 1100;
+        justify-content: center;
+        align-items: center;
+      }
+      .verify-overlay.open {
+        display: flex;
+      }
 
+      .verify-box {
+        background: #0f172a;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        width: 520px;
+        max-width: 96vw;
+        max-height: 92vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+        animation: vfIn 0.22s cubic-bezier(0.34, 1.3, 0.64, 1);
+      }
+      @keyframes vfIn {
+        from {
+          opacity: 0;
+          transform: scale(0.95) translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      /* Header */
+      .verify-header {
+        padding: 20px 22px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+        background: linear-gradient(
+          135deg,
+          rgba(15, 23, 42, 0.9),
+          rgba(30, 58, 95, 0.4)
+        );
+      }
+      .verify-header-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .verify-user-av {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #3b82f6, #6366f1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        font-weight: 700;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        flex-shrink: 0;
+      }
+      .verify-user-name {
+        font-size: 15px;
+        font-weight: 700;
+        color: #f1f5f9;
+      }
+      .verify-user-email {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 2px;
+      }
+      .verify-user-date {
+        font-size: 11px;
+        color: #475569;
+        margin-top: 1px;
+      }
+
+      .verify-close {
+        width: 32px;
+        height: 32px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 8px;
+        color: #94a3b8;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: 0.2s;
+      }
+      .verify-close:hover {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+      }
+
+      /* Status pill */
+      .verify-status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 20px;
+        margin-left: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .pill-pending {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.25);
+      }
+
+      /* Body */
+      .verify-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 22px;
+      }
+      .verify-body::-webkit-scrollbar {
+        width: 4px;
+      }
+      .verify-body::-webkit-scrollbar-thumb {
+        background: #1e293b;
+        border-radius: 2px;
+      }
+
+      /* Section label */
+      .v-section-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: #475569;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 10px;
+      }
+
+      /* ID Card preview */
+      .verify-id-card {
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 14px;
+        overflow: hidden;
+        background: rgba(59, 130, 246, 0.04);
+        margin-bottom: 18px;
+        position: relative;
+      }
+      .verify-id-img {
+        width: 100%;
+        max-height: 260px;
+        object-fit: contain;
+        display: block;
+        background: #020617;
+        cursor: zoom-in;
+        transition: transform 0.3s ease;
+      }
+      .verify-id-img:hover {
+        transform: scale(1.02);
+      }
+      .verify-id-pdf {
+        padding: 22px 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .verify-id-pdf-icon {
+        font-size: 36px;
+      }
+      .verify-id-pdf-info h4 {
+        font-size: 14px;
+        color: #e2e8f0;
+        font-weight: 600;
+      }
+      .verify-id-pdf-info p {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 3px;
+      }
+      .verify-id-open-btn {
+        margin-left: auto;
+        padding: 8px 14px;
+        background: rgba(59, 130, 246, 0.15);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        border-radius: 8px;
+        color: #60a5fa;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: 0.2s;
+      }
+      .verify-id-open-btn:hover {
+        background: rgba(59, 130, 246, 0.25);
+      }
+
+      /* No ID card placeholder */
+      .verify-no-id {
+        padding: 30px 20px;
+        text-align: center;
+        color: #475569;
+        font-size: 13px;
+      }
+      .verify-no-id-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+        display: block;
+        opacity: 0.5;
+      }
+
+      /* Zoom overlay */
+      .id-zoom-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 1200;
+        justify-content: center;
+        align-items: center;
+        cursor: zoom-out;
+      }
+      .id-zoom-overlay.open {
+        display: flex;
+      }
+      .id-zoom-overlay img {
+        max-width: 90vw;
+        max-height: 90vh;
+        border-radius: 10px;
+        object-fit: contain;
+        box-shadow: 0 0 60px rgba(0, 0, 0, 0.8);
+      }
+      .id-zoom-close {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        width: 36px;
+        height: 36px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        color: #fff;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1201;
+        transition: 0.2s;
+      }
+      .id-zoom-close:hover {
+        background: rgba(239, 68, 68, 0.3);
+      }
+
+      /* Reason box */
+      .verify-reason-box {
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 10px;
+        font-size: 13px;
+        color: #94a3b8;
+        line-height: 1.6;
+        margin-bottom: 20px;
+        font-style: italic;
+      }
+      .verify-no-reason {
+        color: #475569;
+        font-style: italic;
+        font-size: 12px;
+      }
+
+      /* Footer actions */
+      .verify-footer {
+        padding: 16px 22px;
+        border-top: 1px solid rgba(255, 255, 255, 0.07);
+        display: flex;
+        gap: 10px;
+        flex-shrink: 0;
+        background: rgba(2, 6, 23, 0.6);
+      }
+      .vf-btn {
+        flex: 1;
+        padding: 12px;
+        border: none;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 700;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.22s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .vf-btn-approve {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: #fff;
+      }
+      .vf-btn-approve:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+      }
+      .vf-btn-reject {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: #fff;
+      }
+      .vf-btn-reject:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+      }
+      .vf-btn-close {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        color: #94a3b8;
+        flex: 0.5;
+      }
+      .vf-btn-close:hover {
+        background: rgba(255, 255, 255, 0.09);
+        color: #e2e8f0;
+      }
+      .vf-btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+        transform: none !important;
+      }
+
+      /* Request card — enhanced */
+      .request-card {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 14px;
+        padding: 16px;
+        margin: 0 16px 12px;
+        transition: all 0.25s ease;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+      .request-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(59, 130, 246, 0.25);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      }
+      .request-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .request-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #3b82f6, #6366f1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+      }
+      .request-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .request-info h4 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #f1f5f9;
+      }
+      .request-info p {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .request-meta {
+        font-size: 11px;
+        color: #475569;
+        margin-top: 3px;
+      }
+
+      .request-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      /* View button */
+      .btn-view {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        border-radius: 10px;
+        background: rgba(59, 130, 246, 0.08);
+        color: #60a5fa;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-family: inherit;
+      }
+      .btn-view:hover {
+        background: rgba(59, 130, 246, 0.18);
+        border-color: #3b82f6;
+        transform: translateY(-1px);
+      }
+      .btn-approve {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        font-family: inherit;
+      }
+      .btn-approve:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      }
+      .btn-reject {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        font-family: inherit;
+      }
+      .btn-reject:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+      }
+
+      /* No ID badge */
+      .no-id-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 20px;
+        background: rgba(245, 158, 11, 0.12);
+        border: 1px solid rgba(245, 158, 11, 0.25);
+        color: #f59e0b;
+      }
+      .has-id-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 20px;
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.25);
+        color: #60a5fa;
+      }
+
+      .requests-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 16px 8px;
+      }
+      .requests-header h2 {
+        font-size: 18px;
+        color: #f1f5f9;
+      }
+      .requests-count {
+        font-size: 12px;
+        color: #64748b;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 4px 10px;
+        border-radius: 20px;
+      }
+    </style>
+  </head>
   <body>
     <div class="dashboard">
       <!-- SIDEBAR -->
-
       <div class="sidebar" id="sidebar">
         <div class="logo">🤖 <span>Admin Panel</span></div>
-
         <div class="menu">
           <div class="menu-item active" onclick="openSection('chat')">
             💬 <span>Chat</span>
           </div>
-
           <div class="menu-item" onclick="openSection('requests')">
             📩 <span>Requests</span>
           </div>
-
           <div class="menu-item" onclick="openSection('upload')">
             📂 <span>Upload Data</span>
           </div>
-
           <div class="menu-item" onclick="openSection('profile')">
             👤 <span>Profile</span>
           </div>
-
           <div class="menu-item" onclick="openSection('usage')">
             📊 <span>App Usage</span>
           </div>
         </div>
-
         <button class="collapse-btn" onclick="toggleSidebar()">☰</button>
       </div>
 
       <!-- MAIN CONTENT -->
-
       <div class="main">
         <div class="topbar">
-          <div>
-            <h2>Admin Dashboard</h2>
-          </div>
-
+          <div><h2>Admin Dashboard</h2></div>
           <div style="display: flex; align-items: center; gap: 20px">
             <div class="notification-icon" onclick="toggleNotificationPopup()">
-              🔔
-              <span class="badge" id="notifCount">0</span>
+              🔔 <span class="badge" id="notifCount">0</span>
             </div>
-
             <div onclick="openProfileModal()" style="cursor: pointer">
               👤 {{ user.username }}
             </div>
-
             <button class="logout" onclick="handleLogout()">Logout</button>
           </div>
         </div>
+
         <!-- CHAT SECTION -->
         <div id="chat-section" class="section active">
           <div class="container">
-            <!-- LEFT PANEL -->
             <div class="admin-panel">
               <div class="chat-history-header">
                 <button class="new-chat-btn" onclick="createNewChat()">
                   + New Chat
                 </button>
               </div>
-
               <div id="chatHistory" class="chat-history"></div>
             </div>
-
-            <!-- RIGHT PANEL -->
             <div class="chat-panel">
               <div class="chat-container">
                 <div class="chat-header">
                   <div class="assistant-avatar">🤖</div>
-
                   <div class="assistant-info">
                     <h2>Admin Assistant</h2>
                     <p>Knowledge Base Chat</p>
                   </div>
-
                   <div class="status-indicator"></div>
                 </div>
-
                 <div id="chatMessages" class="chat-messages">
                   <div class="welcome-message">
                     <h3>Hello Admin 👋</h3>
                     <p>Ask something from the knowledge base.</p>
                   </div>
                 </div>
-
                 <div class="chat-input">
                   <div class="input-wrapper">
                     <input
@@ -104,12 +597,10 @@
                       placeholder="Ask assistant..."
                       autocomplete="off"
                     />
-
                     <button class="emoji-btn" onclick="insertEmoji()">
                       😊
                     </button>
                   </div>
-
                   <button id="sendButton">➤</button>
                 </div>
               </div>
@@ -117,18 +608,21 @@
           </div>
         </div>
 
-        <!-- REQUESTS -->
+        <!-- REQUESTS SECTION -->
         <div id="requests-section" class="section">
-          <h2>Admin Requests</h2>
-
-          <div id="requestList"></div>
+          <div class="requests-header">
+            <h2>🛡️ Admin Access Requests</h2>
+            <span class="requests-count" id="requestsCount">0 pending</span>
+          </div>
+          <div class="requests-container">
+            <div id="requestList" class="requests-grid"></div>
+          </div>
         </div>
 
         <!-- UPLOAD -->
         <div id="upload-section" class="section">
           <div class="upload-section">
             <h2>Upload Knowledge Data</h2>
-
             <form id="uploadForm">
               <div class="drop-area">
                 <input
@@ -137,17 +631,12 @@
                   name="file"
                   accept=".pdf,.txt,.xlsx,.png,.jpg,.jpeg"
                 />
-
                 <p id="fileName">Choose file to upload</p>
               </div>
-
               <br />
-
               <button id="uploadBtn" type="submit">Upload File</button>
             </form>
-
             <div id="uploadStatus"></div>
-
             <div class="upload-progress">
               <div
                 style="
@@ -169,7 +658,6 @@
               <div class="progress-bar" id="uploadProgressBar"></div>
             </div>
           </div>
-
           <div class="documents">
             <h2>Uploaded Documents</h2>
             <div id="documentsList"></div>
@@ -184,23 +672,19 @@
               <h2 id="profileName">Loading...</h2>
               <p id="profileRole"></p>
             </div>
-
             <div class="profile-details">
               <div class="profile-item">
-                <span>Email</span>
-                <strong id="profileEmail">...</strong>
+                <span>Email</span><strong id="profileEmail">...</strong>
               </div>
-
               <div class="profile-item">
-                <span>Account Created</span>
-                <strong id="profileDate">...</strong>
+                <span>Account Created</span
+                ><strong id="profileDate">...</strong>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- APP USAGE SECTION -->
-        <!-- APP USAGE SECTION -->
+        <!-- APP USAGE SECTION (ENHANCED) -->
         <div id="usage-section" class="section">
           <div class="page-header">
             <h2>📊 App Analytics</h2>
@@ -212,25 +696,149 @@
               <p>Total Users</p>
               <h3 id="totalUsers">0</h3>
             </div>
-
             <div class="analytics-card">
               <p>Total Admins</p>
               <h3 id="totalAdmins">0</h3>
             </div>
-
             <div class="analytics-card">
               <p>Total Chats</p>
               <h3 id="totalChats">0</h3>
             </div>
-
             <div class="analytics-card">
               <p>Total Messages</p>
               <h3 id="totalMessages">0</h3>
             </div>
-
             <div class="analytics-card">
               <p>Documents</p>
               <h3 id="totalDocs">0</h3>
+            </div>
+            <!-- NEW: Online Users Card -->
+            <div
+              class="analytics-card online-card"
+              onclick="toggleOnlinePanel()"
+            >
+              <p>🟢 Online Now</p>
+              <h3 id="onlineCount">0</h3>
+              <span class="online-card-hint">Click to view</span>
+            </div>
+          </div>
+
+          <!-- NEW: TWO-COLUMN LAYOUT FOR ONLINE + DOC TRACKING -->
+          <div class="tracking-grid">
+            <!-- ONLINE USERS PANEL -->
+            <div class="tracking-panel" id="onlinePanel">
+              <div class="tracking-panel-header">
+                <span class="tracking-panel-title">
+                  <span class="live-dot"></span> Live Users
+                </span>
+                <span class="tracking-panel-badge" id="onlineBadge"
+                  >0 online</span
+                >
+              </div>
+              <div class="online-users-list" id="onlineUsersList">
+                <div class="tracking-empty">
+                  <div class="tracking-empty-icon">👥</div>
+                  <p>No users online</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- DOCUMENT READ TRACKER PANEL -->
+            <div class="tracking-panel">
+              <div class="tracking-panel-header">
+                <span class="tracking-panel-title"
+                  >📖 Document Read Tracker</span
+                >
+              </div>
+
+              <!-- Doc selector -->
+              <div class="doc-selector-row">
+                <select
+                  id="docTrackerSelect"
+                  onchange="loadDocReaders(this.value)"
+                >
+                  <option value="">— Select an uploaded document —</option>
+                </select>
+                <button class="refresh-btn" onclick="refreshDocTracker()">
+                  ↻ Refresh
+                </button>
+              </div>
+
+              <!-- Summary row -->
+              <div
+                class="doc-tracker-summary"
+                id="docTrackerSummary"
+                style="display: none"
+              >
+                <div class="summary-pill">
+                  <span class="summary-pill-label">Total Reads</span>
+                  <span class="summary-pill-value" id="summaryTotalReads"
+                    >0</span
+                  >
+                </div>
+                <div class="summary-pill">
+                  <span class="summary-pill-label">Unique Users</span>
+                  <span class="summary-pill-value" id="summaryUniqueUsers"
+                    >0</span
+                  >
+                </div>
+              </div>
+
+              <!-- Readers list -->
+              <div class="readers-list" id="readersList">
+                <div class="tracking-empty">
+                  <div class="tracking-empty-icon">📄</div>
+                  <p>Select a document to see who has read it</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- REALTIME READ FEED -->
+          <div class="realtime-feed-section">
+            <div class="tracking-panel-header">
+              <span class="tracking-panel-title">
+                <span class="live-dot"></span> Live Read Feed
+              </span>
+              <button class="refresh-btn" onclick="clearReadFeed()">
+                ✕ Clear
+              </button>
+            </div>
+            <div class="realtime-feed" id="realtimeFeed">
+              <div class="tracking-empty">
+                <div class="tracking-empty-icon">📡</div>
+                <p>Waiting for document queries…</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- DOCUMENT STATS TABLE -->
+          <div class="doc-stats-section">
+            <div class="tracking-panel-header">
+              <span class="tracking-panel-title"
+                >📊 Document Engagement Stats</span
+              >
+              <button class="refresh-btn" onclick="loadDocStats()">
+                ↻ Refresh
+              </button>
+            </div>
+            <div class="doc-stats-table-wrapper">
+              <table class="doc-stats-table" id="docStatsTable">
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th>Uploaded</th>
+                    <th>Total Reads</th>
+                    <th>Unique Users</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="docStatsBody">
+                  <tr>
+                    <td colspan="5" class="table-empty">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -240,12 +848,10 @@
               <h4>User vs Admin Ratio</h4>
               <canvas id="userChart"></canvas>
             </div>
-
             <div class="chart-card">
               <h4>Chats Over Time</h4>
               <canvas id="chatChart"></canvas>
             </div>
-
             <div class="chart-card full-width">
               <h4>Messages Activity</h4>
               <canvas id="messageChart"></canvas>
@@ -254,13 +860,275 @@
         </div>
       </div>
     </div>
+
     <div id="notificationPopup" class="notification-popup">
       <h3>Notifications</h3>
-
       <div id="notificationList"></div>
     </div>
+
+    <!-- ════════════════════════════════════════════════
+         VERIFICATION MODAL
+    ════════════════════════════════════════════════ -->
+    <div
+      id="verifyOverlay"
+      class="verify-overlay"
+      onclick="if (event.target === this) closeVerify();"
+    >
+      <div class="verify-box">
+        <!-- Header -->
+        <div class="verify-header">
+          <div class="verify-header-left">
+            <div class="verify-user-av" id="vUserAv">?</div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <div class="verify-user-name" id="vUserName">—</div>
+                <span class="verify-status-pill pill-pending">Pending</span>
+              </div>
+              <div class="verify-user-email" id="vUserEmail">—</div>
+              <div class="verify-user-date" id="vUserDate">—</div>
+            </div>
+          </div>
+          <button class="verify-close" onclick="closeVerify()">✕</button>
+        </div>
+
+        <!-- Body -->
+        <div class="verify-body">
+          <!-- ID Card -->
+          <div class="v-section-label">📋 Submitted ID Card</div>
+          <div class="verify-id-card" id="vIdCard">
+            <div class="verify-no-id">
+              <span class="verify-no-id-icon">🪪</span>
+              Loading…
+            </div>
+          </div>
+
+          <!-- Reason -->
+          <div class="v-section-label">📝 Reason / Notes</div>
+          <div class="verify-reason-box" id="vReason">
+            <span class="verify-no-reason">No reason provided.</span>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="verify-footer">
+          <button class="vf-btn vf-btn-close" onclick="closeVerify()">
+            Close
+          </button>
+          <button
+            class="vf-btn vf-btn-reject"
+            id="vRejectBtn"
+            onclick="verifyAction('reject')"
+          >
+            ✕ Reject
+          </button>
+          <button
+            class="vf-btn vf-btn-approve"
+            id="vApproveBtn"
+            onclick="verifyAction('approve')"
+          >
+            ✓ Approve
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Image zoom overlay -->
+    <div id="idZoomOverlay" class="id-zoom-overlay" onclick="closeZoom()">
+      <button class="id-zoom-close" onclick="closeZoom()">✕</button>
+      <img id="idZoomImg" src="" alt="ID zoomed" />
+    </div>
+
+    <!-- Reader Detail Modal -->
+    <div
+      id="readerModal"
+      class="reader-modal-overlay"
+      onclick="if (event.target === this) closeReaderModal();"
+    >
+      <div class="reader-modal">
+        <div class="reader-modal-header">
+          <h3 id="readerModalTitle">User Queries</h3>
+          <button class="reader-modal-close" onclick="closeReaderModal()">
+            ✕
+          </button>
+        </div>
+        <div id="readerModalBody" class="reader-modal-body"></div>
+      </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="/static/admin.js"></script>
+
+    <script>
+      // ────────────────────────────────────────────────────────────
+      // VERIFICATION MODAL
+      // ────────────────────────────────────────────────────────────
+      let _verifyReqId = null;
+
+      function openVerify(
+        reqId,
+        username,
+        email,
+        hasIdCard,
+        reason,
+        createdAt,
+      ) {
+        _verifyReqId = reqId;
+
+        // Populate header
+        document.getElementById("vUserAv").textContent = username
+          .charAt(0)
+          .toUpperCase();
+        document.getElementById("vUserName").textContent = username;
+        document.getElementById("vUserEmail").textContent = email;
+        document.getElementById("vUserDate").textContent =
+          "Submitted: " + createdAt;
+
+        // Reason
+        const vReason = document.getElementById("vReason");
+        vReason.innerHTML = reason
+          ? `<span>${_esc(reason)}</span>`
+          : `<span class="verify-no-reason">No reason provided.</span>`;
+
+        // ID Card
+        const vId = document.getElementById("vIdCard");
+        if (hasIdCard) {
+          const idUrl = `/admin/request/id/${reqId}`;
+          // Try loading as image; fall back to PDF display
+          vId.innerHTML = `
+            <img
+              id="vIdImg"
+              class="verify-id-img"
+              src="${idUrl}"
+              alt="ID Card"
+              onerror="showPdfFallback('${idUrl}')"
+              onclick="openZoom('${idUrl}')"
+            />`;
+        } else {
+          vId.innerHTML = `
+            <div class="verify-no-id">
+              <span class="verify-no-id-icon">🪪</span>
+              No ID card uploaded with this request.
+            </div>`;
+        }
+
+        // Reset buttons
+        document.getElementById("vApproveBtn").disabled = false;
+        document.getElementById("vRejectBtn").disabled = false;
+
+        document.getElementById("verifyOverlay").classList.add("open");
+      }
+
+      function showPdfFallback(url) {
+        const vId = document.getElementById("vIdCard");
+        vId.innerHTML = `
+          <div class="verify-id-pdf">
+            <span class="verify-id-pdf-icon">📄</span>
+            <div class="verify-id-pdf-info">
+              <h4>ID Card (PDF)</h4>
+              <p>Cannot preview PDF inline — open in new tab to view.</p>
+            </div>
+            <a href="${url}" target="_blank" class="verify-id-open-btn">
+              🔗 Open PDF
+            </a>
+          </div>`;
+      }
+
+      function closeVerify() {
+        document.getElementById("verifyOverlay").classList.remove("open");
+        _verifyReqId = null;
+      }
+
+      async function verifyAction(action) {
+        if (!_verifyReqId) return;
+
+        const approveBtn = document.getElementById("vApproveBtn");
+        const rejectBtn = document.getElementById("vRejectBtn");
+        approveBtn.disabled = true;
+        rejectBtn.disabled = true;
+
+        const label = action === "approve" ? "Approving…" : "Rejecting…";
+        if (action === "approve") approveBtn.textContent = label;
+        else rejectBtn.textContent = label;
+
+        try {
+          const res = await fetch(`/admin/${action}/${_verifyReqId}`, {
+            method: "POST",
+          });
+          const data = await res.json();
+
+          closeVerify();
+          loadRequests();
+          loadNotifications();
+
+          // Brief toast
+          _showAdminToast(
+            action === "approve"
+              ? "✅ User approved as admin!"
+              : "❌ Request rejected.",
+            action === "approve" ? "#22c55e" : "#ef4444",
+          );
+        } catch (err) {
+          approveBtn.disabled = false;
+          rejectBtn.disabled = false;
+          approveBtn.textContent = "✓ Approve";
+          rejectBtn.textContent = "✕ Reject";
+          _showAdminToast("Request failed. Try again.", "#ef4444");
+        }
+      }
+
+      // Zoom
+      function openZoom(src) {
+        document.getElementById("idZoomImg").src = src;
+        document.getElementById("idZoomOverlay").classList.add("open");
+      }
+      function closeZoom() {
+        document.getElementById("idZoomOverlay").classList.remove("open");
+      }
+
+      // Escape helper
+      function _esc(str) {
+        return str
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      // Toast helper
+      function _showAdminToast(msg, color) {
+        const old = document.getElementById("_adminToast");
+        if (old) old.remove();
+        const t = document.createElement("div");
+        t.id = "_adminToast";
+        t.style.cssText = `
+          position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+          background:${color};color:#fff;
+          padding:10px 22px;border-radius:10px;
+          font-size:13px;font-weight:600;z-index:9999;
+          box-shadow:0 8px 24px rgba(0,0,0,0.4);
+          animation:fadeInToast 0.2s ease;font-family:inherit;
+        `;
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+      }
+
+      function toggleSidebar() {
+        document.getElementById("sidebar").classList.toggle("collapsed");
+      }
+    </script>
+
+    <style>
+      @keyframes fadeInToast {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+      }
+    </style>
 
     <script>
       function toggleSidebar() {
