@@ -36,6 +36,9 @@ from pinecone import Pinecone, ServerlessSpec
 import tempfile
 import shutil
 import threading
+import random
+
+otp_storage={}
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
@@ -268,35 +271,142 @@ def login():
             flash('Invalid username, email, or password!', 'error')
     return render_template('login.html')
 
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+ 
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
-        email = request.form.get('email', '').strip()
+ 
+        import re
+ 
+        username = request.form.get('username').strip()
+        email = request.form.get('email').strip()
         password = request.form.get('password')
-        if not all([username, email, password]):
-            flash('Please fill all fields!', 'error')
-            return render_template('register.html')
-        if len(password) < 6:
-            flash('Password must be at least 6 characters!', 'error')
-            return render_template('register.html')
-        if len(username) < 3:
-            flash('Username must be at least 3 characters!', 'error')
-            return render_template('register.html')
-        if User.query.filter((User.username == username) | (User.email == email)).first():
-            flash('Username or email already exists!', 'error')
+        confirm_password = request.form.get('confirmPassword')
+ 
+        # 🔹 1. Email format check
+        if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$', email):
+            flash("Invalid email format", "error")
+            return redirect(url_for('register'))
+ 
+        # 🔹 2. Domain restriction
+        allowed_domains = ["@gpa.ac.in", "@gmail.com"]
+ 
+        if not any(email.endswith(domain) for domain in allowed_domains):
+            flash("Only GPA college or Gmail emails are allowed", "error")
+            return redirect(url_for('register'))
+ 
+        # 🔹 3. Existing user check
+        existing_user = User.query.filter(
+            (User.username == username) | (User.email == email)
+        ).first()
+ 
+        if existing_user:
+            flash("User already exists", "error")
+            return redirect(url_for('register'))
+ 
+        # 🔹 4. Password strength
+        if not (
+            len(password) >= 8 and
+            re.search(r'[A-Z]', password) and
+            re.search(r'[a-z]', password) and
+            re.search(r'\d', password) and
+            re.search(r'[^a-zA-Z\d]', password)
+        ):
+            flash("Password must be strong", "error")
+            return redirect(url_for('register'))
+ 
+        # 🔹 5. Confirm password
+        if password != confirm_password:
+            flash("Passwords do not match", "error")
+            return redirect(url_for('register'))
+ 
+        # 🔥 6. Generate OTP
+        otp = str(random.randint(100000, 999999))
+ 
+        # 🔥 7. Store temporarily
+        otp_storage[email] = {
+            "username": username,
+            "password": password,
+            "otp": otp
+        }
+
+        session['otp_email'] = email
+ 
+        # 🔥 8. Send email
+        msg = Message(
+            subject="OTP Verification",
+            sender=app.config['MAIL_USERNAME'],
+            recipients=[email]
+        )
+ 
+        msg.body = f"Your OTP is: {otp}"
+ 
+        mail.send(msg)
+ 
+        flash("OTP sent to your email", "success")
+        return redirect(url_for('verify_otp'))
+ 
+    return render_template("register.html")
+ 
+@app.route('/verify-otp', methods=['GET', 'POST'])
+def verify_otp():
+ 
+    if request.method == 'POST':
+        email = session.get('otp_email')
+        user_otp = request.form.get('otp').strip()
+ 
+        if email in otp_storage and otp_storage[email]["otp"] == user_otp:
+ 
+            data = otp_storage[email]
+ 
+            user = User(
+                username=data["username"],
+                email=email,
+                role="user"
+            )
+            user.password_hash = generate_password_hash(data["password"])
+ 
+            db.session.add(user)
+            db.session.commit()
+ 
+            otp_storage.pop(email)
+ 
+            flash("Account created successfully!", "success")
+            return redirect(url_for('login'))
+ 
         else:
-            try:
-                user = User(username=username, email=email,
-                            password_hash=generate_password_hash(password), role='user')
-                db.session.add(user)
-                db.session.commit()
-                flash(f'✅ Welcome {username}! Please login.', 'success')
-                return redirect(url_for('login'))
-            except Exception:
-                db.session.rollback()
-                flash('Registration failed. Try again.', 'error')
-    return render_template('register.html')
+            flash("Invalid OTP", "error")
+ 
+    return render_template("verify_otp.html")
+ 
+@app.route('/resend-otp', methods=['POST'])
+def resend_otp():
+ 
+    email = request.form.get('email')
+ 
+    if email not in otp_storage:
+        return jsonify({"success": False, "message": "No OTP request found"})
+ 
+    # Generate new OTP
+    otp = str(random.randint(100000, 999999))
+ 
+    otp_storage[email]["otp"] = otp
+ 
+    # Send email again
+    msg = Message(
+        subject="Resend OTP",
+        sender=app.config['MAIL_USERNAME'],
+        recipients=[email]
+    )
+ 
+    msg.body = f"Your new OTP is: {otp}"
+    mail.send(msg)
+ 
+    return jsonify({"success": True})
+ 
+ 
+ 
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
@@ -1016,6 +1126,5 @@ def logout():
 
 if __name__ == '__main__':
     with app.app_context():
-        # db.drop_all()
         db.create_all()
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
